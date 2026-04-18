@@ -365,6 +365,33 @@
     max-width: 132px;
   }
 
+  .scene-member-flags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.2rem;
+  }
+
+  .scene-member-flag {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  .scene-member-flag.source {
+    background: rgba(10, 132, 255, 0.12);
+    color: #0a84ff;
+  }
+
+  .scene-member-flag.primary {
+    background: rgba(168, 85, 247, 0.16);
+    color: #7c3aed;
+  }
+
   .scene-log {
     max-height: 280px;
     overflow: auto;
@@ -631,7 +658,7 @@
             <input class="form-control" id="scene-name" type="text">
           </div>
           <input id="scene-id" type="hidden">
-          <div class="col-md-6">
+          <div class="col-12">
             <label class="form-label" for="household-select">
               <span class="scene-label-row">
                 <span>Household</span>
@@ -643,25 +670,13 @@
             </label>
             <select class="form-select" id="household-select"></select>
           </div>
-          <div class="col-md-6">
-            <label class="form-label" for="coordinator-select">
-              <span class="scene-label-row">
-                <span>Coordinator Room</span>
-                <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Coordinator Room">
-                  ?
-                  <span class="scene-tooltip">The main room that anchors the group and receives the source change first. Choose the room that should lead the scene.</span>
-                </span>
-              </span>
-            </label>
-            <select class="form-select" id="coordinator-select"></select>
-          </div>
           <div class="col-12">
             <label class="form-label">
               <span class="scene-label-row">
-                <span>Group Members</span>
+                <span>Scene Rooms</span>
                 <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Group Members">
                   ?
-                  <span class="scene-tooltip">Additional rooms to join the coordinator when the scene runs. Leave all unchecked for a single-room scene. Selected member tiles can also carry their own optional volume override.</span>
+                  <span class="scene-tooltip">Pick the rooms that should be part of this scene. For line-in and TV scenes, the source room is included automatically. One selected room becomes the internal lead room behind the scenes.</span>
                 </span>
               </span>
             </label>
@@ -673,7 +688,7 @@
                 <span>Source Kind</span>
                 <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Source Kind">
                   ?
-                  <span class="scene-tooltip">The type of thing this scene should load. The list changes based on what the coordinator room supports, such as favorites, line-in, or TV.</span>
+                  <span class="scene-tooltip">The type of thing this scene should load. The list is based on what is available in this household, such as favorites, line-in, or TV.</span>
                 </span>
               </span>
             </label>
@@ -694,10 +709,10 @@
           <div class="col-md-3">
             <label class="form-label" for="coordinator-volume">
               <span class="scene-label-row">
-                <span>Coordinator Volume</span>
+                <span>Lead Room Volume</span>
                 <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Coordinator Volume">
                   ?
-                  <span class="scene-tooltip">Optional starting volume for the coordinator room. Leave this blank to keep whatever volume the room already has.</span>
+                  <span class="scene-tooltip">Optional starting volume for the scene's lead room. Leave this blank to keep whatever volume that room already has.</span>
                 </span>
               </span>
             </label>
@@ -811,7 +826,6 @@
       sceneName: document.getElementById("scene-name"),
       sceneId: document.getElementById("scene-id"),
       householdSelect: document.getElementById("household-select"),
-      coordinatorSelect: document.getElementById("coordinator-select"),
       memberList: document.getElementById("member-list"),
       sourceKind: document.getElementById("source-kind"),
       sourceTarget: document.getElementById("source-target"),
@@ -958,14 +972,43 @@
       return (household?.favorites || []).filter((favorite) => favorite.playable !== false);
     }
 
+    function getSelectedSceneRoomIdsFromDraft() {
+      const selected = Array.from(new Set([state.draft.coordinatorPlayerId, ...(state.draft.memberPlayerIds || [])].filter(Boolean)));
+      const source = state.draft.source;
+      if ((source?.kind === "line_in" || source?.kind === "tv") && source.deviceId) {
+        if (!selected.includes(source.deviceId)) {
+          selected.unshift(source.deviceId);
+        }
+      }
+      return selected;
+    }
+
+    function resolveCoordinatorPlayerId(selectedRoomIds, source) {
+      const uniqueRooms = Array.from(new Set((selectedRoomIds || []).filter(Boolean)));
+
+      if ((source?.kind === "line_in" || source?.kind === "tv") && source.deviceId) {
+        return source.deviceId;
+      }
+
+      if (state.draft?.coordinatorPlayerId && uniqueRooms.includes(state.draft.coordinatorPlayerId)) {
+        return state.draft.coordinatorPlayerId;
+      }
+
+      return uniqueRooms[0] || "";
+    }
+
     function serializeDraft() {
       serializeCloudConfig();
       const draft = clone(state.draft);
       draft.name = elements.sceneName.value.trim() || "New Scene";
       draft.householdId = elements.householdSelect.value;
-      draft.coordinatorPlayerId = elements.coordinatorSelect.value;
-      draft.memberPlayerIds = Array.from(elements.memberList.querySelectorAll("input[type='checkbox']:checked")).map((checkbox) => checkbox.value);
       draft.source = buildSourcePayload();
+      const selectedRoomIds = Array.from(elements.memberList.querySelectorAll("input[type='checkbox']:checked")).map((checkbox) => checkbox.value);
+      draft.coordinatorPlayerId = resolveCoordinatorPlayerId(selectedRoomIds, draft.source);
+      if ((draft.source?.kind === "line_in" || draft.source?.kind === "tv") && draft.source.deviceId && !selectedRoomIds.includes(draft.source.deviceId)) {
+        selectedRoomIds.unshift(draft.source.deviceId);
+      }
+      draft.memberPlayerIds = selectedRoomIds.filter((playerId) => playerId !== draft.coordinatorPlayerId);
       draft.coordinatorVolume = elements.coordinatorVolume.value === "" ? undefined : Number(elements.coordinatorVolume.value);
       draft.settleMs = Number(elements.settleMs.value || 0);
       draft.retryCount = Number(elements.retryCount.value || 0);
@@ -974,6 +1017,7 @@
       draft.offBehavior = { kind: elements.offBehavior.value };
       draft.playerVolumes = Array.from(elements.memberList.querySelectorAll("input[data-player-id]"))
         .filter((input) => input.value !== "")
+        .filter((input) => selectedRoomIds.includes(input.dataset.playerId) && input.dataset.playerId !== draft.coordinatorPlayerId)
         .map((input) => ({
           playerId: input.dataset.playerId,
           volume: Number(input.value),
@@ -1127,40 +1171,40 @@
         .join("");
     }
 
-    function renderCoordinatorOptions() {
-      const household = getActiveHousehold();
-      const players = household?.players || [];
-      const currentCoordinator = players.some((player) => player.id === state.draft.coordinatorPlayerId)
-        ? state.draft.coordinatorPlayerId
-        : players[0]?.id || "";
-      state.draft.coordinatorPlayerId = currentCoordinator;
-      elements.coordinatorSelect.innerHTML = players
-        .map((player) => `<option value="${player.id}" ${player.id === currentCoordinator ? "selected" : ""}>${player.name}</option>`)
-        .join("");
-    }
-
     function renderMemberOptions() {
       const household = getActiveHousehold();
-      const coordinatorId = state.draft.coordinatorPlayerId;
-      const selected = new Set(state.draft.memberPlayerIds.filter((playerId) => playerId !== coordinatorId));
+      const selectedRoomIds = getSelectedSceneRoomIdsFromDraft();
+      const selected = new Set(selectedRoomIds);
+      const coordinatorId = resolveCoordinatorPlayerId(selectedRoomIds, state.draft.source);
+      state.draft.coordinatorPlayerId = coordinatorId;
+      state.draft.memberPlayerIds = selectedRoomIds.filter((playerId) => playerId !== coordinatorId);
       const values = new Map((state.draft.playerVolumes || []).map((entry) => [entry.playerId, entry.volume]));
-      const players = (household?.players || []).filter((player) => player.id !== coordinatorId);
+      const forcedSourceId = (state.draft.source?.kind === "line_in" || state.draft.source?.kind === "tv")
+        ? state.draft.source.deviceId
+        : "";
+      const players = household?.players || [];
       elements.memberList.innerHTML = players.length === 0
-        ? `<div class="scene-help">No additional players are available for grouping.</div>`
+        ? `<div class="scene-help">No rooms are available in this household.</div>`
         : players
             .map(
               (player) => {
-                const isSelected = selected.has(player.id);
+                const isForcedSource = forcedSourceId === player.id;
+                const isSelected = isForcedSource || selected.has(player.id);
+                const flags = [
+                  isForcedSource ? `<span class="scene-member-flag source">Source Room</span>` : "",
+                  isSelected && coordinatorId === player.id ? `<span class="scene-member-flag primary">Lead Room</span>` : "",
+                ].filter(Boolean).join("");
                 return `
                 <div class="scene-member-pill ${isSelected ? "selected" : ""}">
                   <label class="scene-member-row scene-member-toggle">
-                    <input class="form-check-input" data-member-checkbox type="checkbox" value="${player.id}" ${isSelected ? "checked" : ""}>
+                    <input class="form-check-input" data-member-checkbox type="checkbox" value="${player.id}" ${isSelected ? "checked" : ""} ${isForcedSource ? "disabled" : ""}>
                     <span class="scene-member-copy">
                       <span class="scene-member-title">${player.name}</span>
                       <span class="scene-member-meta">${player.model || "Unknown model"} - ${((player.sourceOptions || []).join(", ") || "favorite").replaceAll("_", " ")}</span>
+                      ${flags ? `<span class="scene-member-flags">${flags}</span>` : ""}
                     </span>
                   </label>
-                  ${isSelected ? `
+                  ${isSelected && coordinatorId !== player.id ? `
                     <div class="scene-member-volume">
                       <label class="scene-member-volume-label" for="member-volume-${player.id}">Volume Override</label>
                       <input
@@ -1183,8 +1227,8 @@
 
     function renderSourceControls() {
       const household = getActiveHousehold();
-      const coordinator = household?.players.find((player) => player.id === state.draft.coordinatorPlayerId);
-      const supportedKinds = ["favorite", ...new Set((coordinator?.sourceOptions || []).filter((kind) => kind !== "favorite"))];
+      const players = household?.players || [];
+      const supportedKinds = ["favorite", ...new Set(players.flatMap((player) => player.sourceOptions || []).filter((kind) => kind !== "favorite"))];
       const sourceKind = supportedKinds.includes(state.draft.source?.kind) ? state.draft.source.kind : supportedKinds[0] || "favorite";
       state.draft.source = state.draft.source || { kind: sourceKind, favoriteId: "" };
       state.draft.source.kind = sourceKind;
@@ -1351,9 +1395,8 @@
       elements.sceneName.value = state.draft.name || "";
       elements.sceneId.value = state.draft.id || "";
       renderHouseholdOptions();
-      renderCoordinatorOptions();
-      renderMemberOptions();
       renderSourceControls();
+      renderMemberOptions();
       elements.coordinatorVolume.value = state.draft.coordinatorVolume === "" ? "" : state.draft.coordinatorVolume ?? "";
       elements.settleMs.value = state.draft.settleMs ?? 750;
       elements.retryCount.value = state.draft.retryCount ?? 3;
@@ -1552,17 +1595,16 @@
         render();
       });
 
-      elements.coordinatorSelect.addEventListener("change", () => {
-        serializeDraft();
-        state.draft.memberPlayerIds = state.draft.memberPlayerIds.filter((playerId) => playerId !== state.draft.coordinatorPlayerId);
-        render();
-      });
-
       elements.sourceKind.addEventListener("change", () => {
         serializeDraft();
         state.draft.source = elements.sourceKind.value === "favorite"
           ? { kind: "favorite", favoriteId: "" }
           : { kind: elements.sourceKind.value, deviceId: "", playOnCompletion: true };
+        render();
+      });
+
+      elements.sourceTarget.addEventListener("change", () => {
+        serializeDraft();
         render();
       });
 
