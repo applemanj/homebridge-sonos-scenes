@@ -9,8 +9,6 @@ The goal is not general Sonos control. The goal is a clean way to trigger multi-
 - setting coordinator and per-room volume,
 - optionally ungrouping when the switch turns off.
 
-This plugin is intentionally positioned as a complement to `homebridge-zp`, not a replacement for it.
-
 ## What Is Implemented
 
 - A singular Homebridge dynamic platform plugin with switch accessories for each configured scene.

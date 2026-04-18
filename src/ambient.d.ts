@@ -2,6 +2,7 @@ declare module "sonos" {
   export interface SonosBrowseItem {
     id?: string;
     title?: string;
+    parentID?: string;
     uri?: string;
     albumArtURI?: string;
   }
@@ -11,6 +12,13 @@ declare module "sonos" {
     total: string;
     updateID: string;
     items: SonosBrowseItem[];
+  }
+
+  export interface SonosBrowseResponse {
+    Result?: string;
+    NumberReturned?: string;
+    TotalMatches?: string;
+    UpdateID?: string;
   }
 
   export interface SonosZoneAttrs {
@@ -83,6 +91,16 @@ declare module "sonos" {
     play(): Promise<boolean>;
     devicePropertiesService(): {
       GetHouseholdID(options?: Record<string, never>): Promise<Record<string, string>>;
+    };
+    contentDirectoryService(): {
+      Browse(options: {
+        BrowseFlag: string;
+        Filter: string;
+        StartingIndex: string;
+        RequestedCount: string;
+        SortCriteria: string;
+        ObjectID: string;
+      }): Promise<SonosBrowseResponse>;
     };
   }
 

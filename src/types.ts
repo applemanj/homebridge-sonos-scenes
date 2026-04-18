@@ -87,6 +87,10 @@ export interface SonosFavorite {
   id: string;
   name: string;
   uri?: string;
+  transportUri?: string;
+  metadata?: string;
+  description?: string;
+  playbackType?: string;
 }
 
 export interface SonosPlayer {

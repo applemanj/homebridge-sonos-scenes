@@ -1,6 +1,15 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { AsyncDeviceDiscovery, Sonos, type SonosBrowseResult, type SonosDeviceDescription, type SonosGroup as RawSonosGroup, type SonosZoneAttrs, type SonosZoneInfo } from "sonos";
+import {
+  AsyncDeviceDiscovery,
+  Sonos,
+  type SonosBrowseResponse,
+  type SonosBrowseResult,
+  type SonosDeviceDescription,
+  type SonosGroup as RawSonosGroup,
+  type SonosZoneAttrs,
+  type SonosZoneInfo,
+} from "sonos";
 import { sampleTopology } from "../sampleTopology";
 import type {
   HouseholdSnapshot,
@@ -25,6 +34,123 @@ interface LivePlayerRecord {
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function decodeXmlEntities(input: string): string {
+  return input
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+function escapeRegExp(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripNamespacePrefix(input: string): string {
+  const separatorIndex = input.indexOf(":");
+  return separatorIndex >= 0 ? input.slice(separatorIndex + 1) : input;
+}
+
+function extractAttributeValue(xml: string, tagName: string, attributeName: string): string | undefined {
+  const pattern = new RegExp(`<${escapeRegExp(tagName)}\\b[^>]*\\b${escapeRegExp(attributeName)}="([^"]+)"`, "i");
+  const match = pattern.exec(xml);
+  const value = match?.[1] ? decodeXmlEntities(match[1]).trim() : "";
+  return value || undefined;
+}
+
+function extractTagValue(xml: string, tagName: string): string | undefined {
+  const pattern = new RegExp(
+    `<${escapeRegExp(tagName)}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${escapeRegExp(tagName)}>`,
+    "i",
+  );
+  const match = pattern.exec(xml);
+  const value = match?.[1] ? decodeXmlEntities(match[1]).trim() : "";
+  return value || undefined;
+}
+
+function buildFavoriteContainerUri(metadata: string): string | undefined {
+  const metadataItemId = extractAttributeValue(metadata, "item", "id");
+  if (!metadataItemId) {
+    return undefined;
+  }
+
+  const itemClass = extractTagValue(metadata, "upnp:class")?.toLowerCase();
+  if (metadataItemId.startsWith("RINCON_") || itemClass?.includes("linein")) {
+    return `x-rincon-stream:${metadataItemId}`;
+  }
+
+  return `x-rincon-cpcontainer:${metadataItemId}`;
+}
+
+export function buildFavoriteTransportUri(favorite: Pick<SonosFavorite, "uri" | "metadata">): string | undefined {
+  if (favorite.uri?.trim()) {
+    return decodeXmlEntities(favorite.uri).trim();
+  }
+
+  if (!favorite.metadata?.trim()) {
+    return undefined;
+  }
+
+  return buildFavoriteContainerUri(favorite.metadata);
+}
+
+function normalizeFavorite(favorite: SonosFavorite): SonosFavorite {
+  const normalized: SonosFavorite = {
+    ...favorite,
+    id: favorite.id.trim(),
+    name: favorite.name.trim() || favorite.id.trim(),
+  };
+
+  if (favorite.uri?.trim()) {
+    normalized.uri = decodeXmlEntities(favorite.uri).trim();
+  }
+
+  if (favorite.metadata?.trim()) {
+    normalized.metadata = decodeXmlEntities(favorite.metadata).trim();
+  }
+
+  const transportUri = favorite.transportUri?.trim() || buildFavoriteTransportUri(normalized);
+  if (transportUri) {
+    normalized.transportUri = transportUri;
+  }
+
+  return normalized;
+}
+
+function fallbackFavoritesFromBrowseResult(result: SonosBrowseResult): SonosFavorite[] {
+  return (result.items ?? []).map((favorite) =>
+    normalizeFavorite({
+      id: favorite.id ?? favorite.title ?? favorite.uri ?? randomString(),
+      name: favorite.title ?? favorite.id ?? "Favorite",
+      uri: favorite.uri,
+    }),
+  );
+}
+
+export function parseFavoriteBrowseXml(xml: string): SonosFavorite[] {
+  const items = xml.match(/<item\b[\s\S]*?<\/item>/gi) ?? [];
+
+  return items.map((itemXml) =>
+    normalizeFavorite({
+      id: stripNamespacePrefix(extractAttributeValue(itemXml, "item", "id") ?? randomString()),
+      name: extractTagValue(itemXml, "dc:title") ?? "Favorite",
+      uri: extractTagValue(itemXml, "res"),
+      metadata: extractTagValue(itemXml, "r:resMD"),
+      description: extractTagValue(itemXml, "r:description"),
+      playbackType: extractTagValue(itemXml, "r:type"),
+    }),
+  );
+}
+
+function formatHouseholdDisplayName(householdIndex: number, householdCount: number): string {
+  if (householdCount <= 1) {
+    return "Sonos Household";
+  }
+
+  return `Sonos Household ${householdIndex + 1}`;
 }
 
 function extractFirstString(input: unknown): string | undefined {
@@ -268,10 +394,14 @@ export class LocalSonosTransport implements SonosTransport {
 
     const coordinator = this.requireLiveRecord(coordinatorPlayerId);
     const favorite = await this.findFavorite(householdId, favoriteId);
-    if (!favorite.uri) {
-      throw new Error(`Favorite "${favorite.name}" does not expose a playable URI through the local transport.`);
+    const transportUri = favorite.transportUri ?? buildFavoriteTransportUri(favorite);
+    if (!transportUri) {
+      throw new Error(`Favorite "${favorite.name}" does not expose enough metadata to build a playable local URI.`);
     }
-    await coordinator.device.setAVTransportURI(favorite.uri);
+    await coordinator.device.setAVTransportURI({
+      uri: transportUri,
+      metadata: favorite.metadata ?? "",
+    });
   }
 
   async loadTv(
@@ -402,16 +532,6 @@ export class LocalSonosTransport implements SonosTransport {
 
       for (const [householdId, root] of rootsByHousehold) {
         const rawGroups = await root.getAllGroups().catch(() => [] as RawSonosGroup[]);
-        const favoriteResult = await root.getFavorites().catch(
-          () =>
-            ({
-              items: [],
-              returned: "0",
-              total: "0",
-              updateID: "0",
-            }) satisfies SonosBrowseResult,
-        );
-
         const householdRecords = records.filter((record) => record.householdId === householdId);
         const householdByHost = new Map(householdRecords.map((record) => [record.host, record]));
         const players: SonosPlayer[] = [];
@@ -495,15 +615,11 @@ export class LocalSonosTransport implements SonosTransport {
           livePlayers.set(fallbackId, record);
         }
 
-        const favorites: SonosFavorite[] = (favoriteResult.items ?? []).map((favorite) => ({
-          id: favorite.id ?? favorite.title ?? favorite.uri ?? randomString(),
-          name: favorite.title ?? favorite.id ?? "Favorite",
-          uri: favorite.uri,
-        }));
+        const favorites = await this.fetchFavorites(root);
 
         households.push({
           id: householdId,
-          displayName: householdRecords[0]?.zoneAttrs?.CurrentZoneName ? `${householdRecords[0].zoneAttrs.CurrentZoneName} household` : `Household ${households.length + 1}`,
+          displayName: formatHouseholdDisplayName(households.length, rootsByHousehold.size),
           players,
           groups,
           favorites,
@@ -582,7 +698,31 @@ export class LocalSonosTransport implements SonosTransport {
       throw new Error(`No discovered Sonos root is available for household "${householdId}".`);
     }
 
-    const favorites = await root.getFavorites().catch(
+    const favorites = await this.fetchFavorites(root);
+    const favorite = favorites.find((item) => item.id === favoriteId || item.name === favoriteId);
+    if (!favorite) {
+      throw new Error(`Favorite "${favoriteId}" was not found.`);
+    }
+
+    return favorite;
+  }
+
+  private async fetchFavorites(root: Sonos): Promise<SonosFavorite[]> {
+    const browseResponse = await root.contentDirectoryService().Browse({
+      BrowseFlag: "BrowseDirectChildren",
+      Filter: "*",
+      StartingIndex: "0",
+      RequestedCount: "100",
+      SortCriteria: "",
+      ObjectID: "FV:2",
+    }).catch(() => undefined as SonosBrowseResponse | undefined);
+
+    const browseFavorites = typeof browseResponse?.Result === "string" ? parseFavoriteBrowseXml(browseResponse.Result) : [];
+    if (browseFavorites.length > 0) {
+      return browseFavorites;
+    }
+
+    const fallbackResult = await root.getFavorites().catch(
       () =>
         ({
           items: [],
@@ -592,16 +732,7 @@ export class LocalSonosTransport implements SonosTransport {
         }) satisfies SonosBrowseResult,
     );
 
-    const favorite = favorites.items.find((item) => item.id === favoriteId || item.title === favoriteId);
-    if (!favorite) {
-      throw new Error(`Favorite "${favoriteId}" was not found.`);
-    }
-
-    return {
-      id: favorite.id ?? favoriteId,
-      name: favorite.title ?? favoriteId,
-      uri: favorite.uri,
-    };
+    return fallbackFavoritesFromBrowseResult(fallbackResult);
   }
 
   private setFixtureGroupMembers(householdId: string, coordinatorPlayerId: string, desiredMembers: string[]): void {

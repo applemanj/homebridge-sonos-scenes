@@ -42,6 +42,7 @@
     padding: 0.75rem 0.9rem;
     border: 1px solid rgba(22, 32, 51, 0.08);
     background: white;
+    color: var(--scene-ink);
     margin-bottom: 0.5rem;
   }
 
@@ -72,6 +73,37 @@
     border-radius: 0.85rem;
     padding: 0.55rem 0.75rem;
     background: white;
+    color: var(--scene-ink);
+    display: block;
+  }
+
+  .scene-member-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+  }
+
+  .scene-member-pill .form-check-input {
+    margin-top: 0.2rem;
+    flex: 0 0 auto;
+  }
+
+  .scene-member-copy {
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+
+  .scene-member-title {
+    color: var(--scene-ink);
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .scene-member-meta {
+    color: #667085;
+    font-size: 0.86rem;
+    line-height: 1.35;
   }
 
   .scene-log {
@@ -348,6 +380,20 @@
       return household?.players.find((player) => player.id === playerId)?.name || playerId;
     }
 
+    function getPlayerNameForHousehold(householdId, playerId) {
+      const household = state.topology?.households?.find((entry) => entry.id === householdId);
+      return household?.players.find((player) => player.id === playerId)?.name || playerId;
+    }
+
+    function getHouseholdDisplayName(householdId) {
+      if (!householdId) {
+        return "No household selected";
+      }
+
+      const household = state.topology?.households?.find((entry) => entry.id === householdId);
+      return household?.displayName || householdId;
+    }
+
     function serializeDraft() {
       const draft = clone(state.draft);
       draft.name = elements.sceneName.value.trim() || "New Scene";
@@ -412,7 +458,10 @@
         const button = document.createElement("button");
         button.type = "button";
         button.className = scene.id === state.activeSceneId ? "active" : "";
-        button.innerHTML = `<strong>${scene.name}</strong><div class="scene-help">${scene.householdId || "No household selected"}</div>`;
+        const coordinatorLabel = scene.coordinatorPlayerId
+          ? ` - ${getPlayerNameForHousehold(scene.householdId, scene.coordinatorPlayerId)}`
+          : "";
+        button.innerHTML = `<strong>${scene.name}</strong><div class="scene-help">${getHouseholdDisplayName(scene.householdId)}${coordinatorLabel}</div>`;
         button.addEventListener("click", () => {
           state.activeSceneId = scene.id;
           state.draft = normalizeScene(scene);
@@ -456,9 +505,13 @@
             .map(
               (player) => `
                 <label class="scene-member-pill">
-                  <input class="form-check-input me-2" type="checkbox" value="${player.id}" ${selected.has(player.id) ? "checked" : ""}>
-                  <strong>${player.name}</strong><br>
-                  <span class="scene-help">${(player.sourceOptions || []).join(", ") || "favorite"}</span>
+                  <span class="scene-member-row">
+                    <input class="form-check-input" type="checkbox" value="${player.id}" ${selected.has(player.id) ? "checked" : ""}>
+                    <span class="scene-member-copy">
+                      <span class="scene-member-title">${player.name}</span>
+                      <span class="scene-member-meta">${player.model || "Unknown model"} - ${((player.sourceOptions || []).join(", ") || "favorite").replaceAll("_", " ")}</span>
+                    </span>
+                  </span>
                 </label>
               `,
             )
@@ -488,7 +541,10 @@
           favoriteName: favorites.find((favorite) => favorite.id === selectedFavorite)?.name || "",
         };
         elements.sourceTarget.innerHTML = favorites
-          .map((favorite) => `<option value="${favorite.id}" ${favorite.id === selectedFavorite ? "selected" : ""}>${favorite.name}</option>`)
+          .map((favorite) => {
+            const label = favorite.description ? `${favorite.name} (${favorite.description})` : favorite.name;
+            return `<option value="${favorite.id}" ${favorite.id === selectedFavorite ? "selected" : ""}>${label}</option>`;
+          })
           .join("");
         return;
       }
@@ -517,7 +573,7 @@
         : selectedMembers
             .map((playerId) => `
               <label class="scene-member-pill">
-                <span class="d-block mb-1"><strong>${getPlayerName(playerId)}</strong></span>
+                <span class="scene-member-title d-block mb-1">${getPlayerName(playerId)}</span>
                 <input class="form-control" data-player-id="${playerId}" type="number" min="0" max="100" value="${values.get(playerId) ?? ""}">
               </label>
             `)
@@ -603,6 +659,15 @@
             .join("");
 
           const favorites = (household.favorites || []).map((favorite) => `<li>${favorite.name}</li>`).join("");
+          const playerRows = household.players
+            .map((player) => {
+              const sourceOptions = ((player.sourceOptions || []).join(", ") || "favorite").replaceAll("_", " ");
+              return `<li><strong>${player.name}</strong> <span class="scene-help">${player.model || "Unknown model"} - ${sourceOptions}</span></li>`;
+            })
+            .join("");
+          const favoriteRows = (household.favorites || [])
+            .map((favorite) => `<li>${favorite.name}${favorite.description ? ` <span class="scene-help">(${favorite.description})</span>` : ""}</li>`)
+            .join("");
 
           return `
             <div class="card h-100">
@@ -610,11 +675,11 @@
                 <h5 class="card-title">${household.displayName}</h5>
                 <p class="scene-help mb-3">${household.id}</p>
                 <strong>Players</strong>
-                <ul>${players || "<li>None</li>"}</ul>
+                <ul>${playerRows || players || "<li>None</li>"}</ul>
                 <strong>Current Groups</strong>
                 <ul>${groups || "<li>None</li>"}</ul>
                 <strong>Favorites</strong>
-                <ul>${favorites || "<li>None</li>"}</ul>
+                <ul>${favoriteRows || favorites || "<li>None</li>"}</ul>
               </div>
             </div>
           `;
