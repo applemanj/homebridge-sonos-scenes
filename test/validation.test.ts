@@ -126,3 +126,33 @@ test("validateSceneDefinition rejects favorites the local transport cannot play"
   assert.equal(validation.valid, false);
   assert.match(validation.errors.join(" "), /not playable through the local transport/i);
 });
+
+test("validateSceneDefinition warns when auto reset hides off behavior", () => {
+  const validation = validateSceneDefinition(
+    {
+      id: "scene-auto-reset-warning",
+      name: "Auto Reset Warning",
+      householdId: "local-household",
+      coordinatorPlayerId: "RINCON_UPPER_LEVEL",
+      memberPlayerIds: ["RINCON_PRIMARY_BEDROOM"],
+      source: {
+        kind: "favorite",
+        favoriteId: "favorite-kexp",
+      },
+      playerVolumes: [],
+      offBehavior: {
+        kind: "ungroup",
+      },
+      settleMs: 750,
+      retryCount: 1,
+      retryDelayMs: 0,
+      autoResetMs: 10000,
+    },
+    sampleTopology,
+    fakeTransport,
+  );
+
+  assert.equal(validation.valid, true);
+  assert.match(validation.warnings.join(" "), /auto reset/i);
+  assert.match(validation.warnings.join(" "), /does not run the scene's off behavior/i);
+});

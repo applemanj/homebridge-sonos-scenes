@@ -43,7 +43,7 @@ test("normalizePlatformConfig applies defaults and normalizes scenes", () => {
   assert.equal(config.scenes[0].name, "Kitchen Favorite");
   assert.deepEqual(config.scenes[0].memberPlayerIds, ["player-2", "player-2"]);
   assert.equal(config.scenes[0].retryCount, 3);
-  assert.equal(config.scenes[0].autoResetMs, 1000);
+  assert.equal(config.scenes[0].autoResetMs, 0);
 });
 
 test("normalizePlatformConfig preserves future self-hosted broker settings", () => {

@@ -172,7 +172,7 @@ export function normalizeScene(scene: Partial<SceneDefinition>): SceneDefinition
     settleMs: Math.max(0, asNumber(scene.settleMs, 750)),
     retryCount: Math.max(0, asNumber(scene.retryCount, 3)),
     retryDelayMs: Math.max(0, asNumber(scene.retryDelayMs, 750)),
-    autoResetMs: Math.max(0, asNumber(scene.autoResetMs, 1000)),
+    autoResetMs: Math.max(0, asNumber(scene.autoResetMs, 0)),
   };
 }
 
@@ -348,6 +348,12 @@ export function validateSceneDefinition(
 
     if (scene.offBehavior.kind === "ungroup" && scene.memberPlayerIds.length === 0) {
       result.warnings.push("Off behavior is set to ungroup, but the scene does not include any grouped members.");
+    }
+
+    if (scene.autoResetMs > 0 && scene.offBehavior.kind !== "none") {
+      result.warnings.push(
+        "Auto Reset only flips the HomeKit switch back off visually. It does not run the scene's off behavior. Set Auto Reset to 0 if you want turning the switch off to trigger ungroup or other off actions.",
+      );
     }
 
     if (scene.coordinatorVolume === undefined && scene.playerVolumes.length === 0) {

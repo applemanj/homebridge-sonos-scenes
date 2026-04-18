@@ -4,128 +4,118 @@
 
 <h1 align="center">homebridge-sonos-scenes</h1>
 
-<p align="center">Homebridge plugin for Sonos workflow scenes and orchestration.</p>
-
-`homebridge-sonos-scenes` is a Homebridge plugin scaffold for Sonos workflow scenes.
+<p align="center">Build Sonos scenes in Homebridge and trigger them from Apple Home.</p>
 
 > [!IMPORTANT]
-> This project is in an active early-testing phase. The local-first scene workflow is usable and published to npm, but cloud-backed Sonos playback is still planned work and some edge cases are still being hardened. If you try the plugin, please share bugs, UI feedback, and Sonos compatibility notes in [GitHub Issues](https://github.com/applemanj/homebridge-sonos-scenes/issues). Real-world feedback is especially helpful right now.
+> This plugin is in active early testing. The local-first scene workflow is usable today, but some Sonos edge cases are still being hardened and cloud-backed playback is still future work. If you try it, please share bugs, setup notes, and UI feedback in [GitHub Issues](https://github.com/applemanj/homebridge-sonos-scenes/issues).
 
-The goal is not general Sonos control. The goal is a clean way to trigger multi-step Sonos workflows from Apple Home, such as:
+`homebridge-sonos-scenes` lets you create repeatable Sonos scenes such as:
 
-- grouping rooms around a coordinator,
-- selecting `line_in`, `favorite`, or transport-gated `tv` sources,
-- setting coordinator and per-room volume,
-- optionally ungrouping when the switch turns off.
+- group specific rooms together
+- start a favorite or line-in source
+- set lead-room and per-room volume
+- optionally ungroup the rooms when the scene turns off
 
-## What Is Implemented
+This plugin is meant for scene-style Sonos workflows, not full everyday Sonos control.
 
-- A singular Homebridge dynamic platform plugin with switch accessories for each configured scene plus companion volume controls for quick level adjustments in Apple Home.
-- A normalized scene model that stores stable Sonos IDs instead of room-name strings.
-- A local-first `SonosTransport` abstraction with live discovery through the `sonos` package and fixture fallback for UI/testing.
-- A `SceneRunner` that validates scenes, serializes execution per coordinator, retries transient failures, and emits structured logs.
-- A Homebridge custom UI under `homebridge-ui/` with discovery, validation, test execution, and scene editing.
-- Sample fixture data and config examples for development without a live Sonos system.
-- Unit tests covering config normalization, validation, retry behavior, and off-action execution.
+## What You Get
 
-## Project Layout
+Each saved scene creates:
 
-```text
-src/
-  accessories/sceneSwitch.ts
-  config.ts
-  discoveryService.ts
-  index.ts
-  logger.ts
-  platform.ts
-  sampleTopology.ts
-  sceneRunner.ts
-  transports/
-  ui/serverApi.ts
-homebridge-ui/
-  public/index.html
-  server.js
-examples/
-  config.example.json
-  sample-topology.json
-docs/
-  cloud-broker.md
-broker/
-  README.md
-  src/server.mjs
-test/
-```
+- a HomeKit switch to run the scene
+- a companion HomeKit volume control accessory for that scene
 
-## Running It
+Typical examples:
+
+- "Office Bedtime" groups a few rooms, starts white noise, and sets quiet volumes
+- "Whole House Line In" groups several rooms around a line-in source
+- "Morning Music" starts a favorite and sets different room volumes
+
+## What Works Today
+
+- Live Sonos discovery from the Homebridge UI
+- Friendly scene editor for picking rooms and sources
+- Favorites that are playable over the local Sonos path
+- Line-in scenes
+- Grouping and ungrouping
+- Scene test runs before saving
+- Per-room volume overrides
+
+## Current Limits
+
+- This is still beta software
+- Some complex Sonos favorites do not work reliably over the local-only path
+- `TV` remains a transport-gated advanced option
+- `Local + Cloud` is reserved for future self-hosted broker support and is not wired into playback yet
+
+For most people, `Local Only` is the right mode today.
+
+## Install
+
+Install from the Homebridge UI by searching for `homebridge-sonos-scenes`, or from npm:
 
 ```bash
-npm install
-npm run build
-npm test
+npm i homebridge-sonos-scenes
 ```
 
-For Homebridge development, point the plugin at a config shaped like [examples/config.example.json](examples/config.example.json).
+Then restart Homebridge.
 
-## Official Homebridge Test Path
+## First-Time Setup
 
-If you want to test it the normal Homebridge way, publish it to npm and install it from Homebridge by package name.
+1. Open the plugin settings in Homebridge.
+2. Click `Discover` to load your Sonos households, rooms, favorites, and inputs.
+3. Click `New Scene`.
+4. Name the scene.
+5. Pick the rooms you want in `Scene Rooms`.
+6. Choose a source such as `favorite` or `line in`.
+7. Optionally set room volume values.
+8. Click `Validate` to check the scene without changing playback.
+9. Click `Run Test` to try it on your Sonos system.
+10. Click `Save Scene Changes`.
+11. Use Homebridge's footer `Save` button to write the full plugin config to disk.
 
-This repo is set up for that flow now:
+After Homebridge reloads the config, the scene accessories should appear in Apple Home.
 
-- `prepare` builds `dist/` for Git-based installs.
-- `prepack` rebuilds `dist/` before `npm publish` so the published tarball contains runnable plugin files.
-- the published package includes `dist/`, `homebridge-ui/`, `config.schema.json`, and the example/docs assets listed in `package.json`.
+## Recommended Starting Point
 
-Typical release flow:
+If you are new to the plugin, start with:
 
-```bash
-npm login
-npm test
-npm publish
-```
+- `Execution Mode`: `Local Only`
+- a small scene with one or two rooms
+- a known-good `favorite` or `line in` source
 
-After that, install `homebridge-sonos-scenes` from the Homebridge UI or via npm in the normal Homebridge plugin workflow.
+That gives you the smoothest first test.
 
-The Homebridge project’s verified-plugin guidance also expects the plugin to be published to npm with source available on GitHub:
+## Troubleshooting
 
-- Homebridge Verified Plugins: <https://github.com/homebridge/homebridge/wiki/verified-Plugins>
+If a scene does not work the first time:
 
-## Transport Notes
+- run `Discover` again so the editor has a fresh Sonos snapshot
+- use `Validate` before `Run Test`
+- try a simpler local favorite or a line-in scene first
+- check the Homebridge log for the scene run details
+- restart Homebridge after updating the plugin
 
-- The default transport is `local`.
-- Live discovery uses the community `sonos` package for local network discovery and control.
-- If live discovery fails, the plugin falls back to the configured fixture file or the built-in sample topology so the custom UI remains usable during development.
-- `tv` source loading is disabled by default and remains transport-gated.
-- Favorites rely on URIs exposed through the local transport; some complex favorite types may need more transport-specific handling later.
+If Apple Home still shows stale or unsupported accessories after an update, close and reopen the Home app first.
 
-## Local Only Vs Local + Cloud
+## Feedback
 
-The intended product shape is now:
+Real-world feedback is especially helpful right now. Useful bug reports include:
 
-- `local_only`: today’s supported mode. It keeps discovery, grouping, line-in, TV, and directly playable favorites on the local Sonos path.
-- `local_plus_cloud`: a future mode for users who choose to run their own Sonos cloud broker for favorites and playlists that are not reliable over the local path.
+- your Sonos speaker models
+- whether the scene uses `favorite`, `line in`, or `tv`
+- what happened when you clicked `Run Test`
+- the relevant Homebridge log output
 
-This project does not host that broker for users. The goal is an optional self-hosted companion service, not a shared multi-tenant cloud run by the plugin maintainer.
+Open issues here:
 
-The config model already reserves a `cloud` section so advanced users and future versions do not need a breaking config redesign later. The broker contract is documented in [docs/cloud-broker.md](docs/cloud-broker.md).
+- [GitHub Issues](https://github.com/applemanj/homebridge-sonos-scenes/issues)
 
-There is also an early self-hosted broker scaffold in [broker/README.md](broker/README.md). It is not wired into scene execution yet, but it gives self-hosters a concrete service shape and a live `/v1/status` endpoint to target.
+## Advanced Docs
 
-## Official Sonos References
+If you want the more technical details, use these docs:
 
-These docs informed the product boundaries and future cloud-adapter shape:
-
-- Sonos Connected Home: <https://docs.sonos.com/docs/connected-home-get-started>
-- Sonos Authorize: <https://docs.sonos.com/docs/authorize>
-- Sonos Discover: <https://docs.sonos.com/docs/discover>
-- Sonos Control: <https://docs.sonos.com/docs/control>
-- Sonos Subscribe: <https://docs.sonos.com/docs/subscribe>
-- Sonos Features: <https://docs.sonos.com/docs/connected-home-features>
-- Homebridge plugin-ui-utils: <https://github.com/homebridge/plugin-ui-utils>
-
-## Current Gaps
-
-- The local transport is MVP-level and best-effort for advanced favorites and TV input handling.
-- The `local_plus_cloud` mode is a planned architecture boundary only; the self-hosted broker contract is documented, but broker-backed playback is not wired into the runtime yet.
-- Subscription-driven refresh is still represented by the transport abstraction, but not yet fully wired for live event propagation.
-- `npm audit` currently reports a high-severity advisory in the transitive `ip` dependency pulled in by `sonos`.
+- [Architecture and Developer Notes](docs/architecture.md)
+- [Cloud Broker Contract](docs/cloud-broker.md)
+- [Self-Hosted Broker Scaffold](broker/README.md)
+- [Example Config](examples/config.example.json)

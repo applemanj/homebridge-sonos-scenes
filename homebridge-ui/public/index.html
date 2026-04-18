@@ -165,6 +165,50 @@
     grid-template-columns: minmax(280px, 1fr) minmax(360px, 2fr);
   }
 
+  .scene-workspace-grid {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .scene-subpanel {
+    display: grid;
+    gap: 0.9rem;
+    min-width: 0;
+  }
+
+  .scene-subpanel-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem 1rem;
+  }
+
+  .scene-subpanel-copy {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+    flex: 1 1 260px;
+  }
+
+  .scene-editor-frame {
+    padding-left: 1.2rem;
+    border-left: 1px solid rgba(22, 32, 51, 0.08);
+  }
+
+  .scene-editor-current {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    background: rgba(10, 132, 255, 0.08);
+    color: #0a84ff;
+  }
+
   .scene-card {
     border-radius: 1rem;
     border: 1px solid rgba(22, 32, 51, 0.08);
@@ -305,12 +349,17 @@
     background: white;
     color: var(--scene-ink);
     display: block;
+    position: relative;
   }
 
   .scene-member-pill.selected {
     border-color: rgba(10, 132, 255, 0.34);
     background: rgba(10, 132, 255, 0.07);
     box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.08);
+  }
+
+  .scene-member-pill.has-corner-flag .scene-member-row {
+    padding-right: 5.75rem;
   }
 
   .scene-member-row {
@@ -354,11 +403,44 @@
     border-top: 1px solid rgba(22, 32, 51, 0.08);
   }
 
+  .scene-member-volume-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
   .scene-member-volume-label {
     color: #556579;
     font-size: 0.78rem;
     font-weight: 600;
     line-height: 1.3;
+  }
+
+  .scene-member-volume-toggle {
+    appearance: none;
+    border: 1px solid rgba(10, 132, 255, 0.28);
+    border-radius: 999px;
+    background: transparent;
+    color: #0a84ff;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.73rem;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+
+  .scene-member-volume-toggle.active {
+    background: rgba(10, 132, 255, 0.14);
+    border-color: rgba(10, 132, 255, 0.36);
+    color: #0a84ff;
+  }
+
+  .scene-member-volume-note {
+    color: #667085;
+    font-size: 0.79rem;
+    line-height: 1.35;
   }
 
   .scene-member-volume-input {
@@ -390,6 +472,13 @@
   .scene-member-flag.primary {
     background: rgba(168, 85, 247, 0.16);
     color: #7c3aed;
+  }
+
+  .scene-member-corner-flag {
+    position: absolute;
+    top: 0.7rem;
+    right: 0.75rem;
+    z-index: 1;
   }
 
   .scene-log {
@@ -485,6 +574,17 @@
   @media (max-width: 960px) {
     .scene-grid {
       grid-template-columns: 1fr;
+    }
+
+    .scene-workspace-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .scene-editor-frame {
+      padding-left: 0;
+      padding-top: 1rem;
+      border-left: 0;
+      border-top: 1px solid rgba(22, 32, 51, 0.08);
     }
   }
 </style>
@@ -614,37 +714,42 @@
     </section>
   </section>
 
-  <div class="scene-grid">
-    <section class="card scene-card">
-      <div class="card-header scene-section-header">
-        <div class="scene-section-header-copy">
-          <strong>Scenes</strong>
-          <div class="scene-help">Each saved scene becomes a HomeKit switch plus a companion volume control.</div>
-          <div class="scene-inline-note mt-2">Save scene changes in the editor, then use Homebridge&apos;s footer Save button when you&apos;re ready to write everything to `config.json`.</div>
-        </div>
-        <div class="scene-section-actions">
-          <button class="btn btn-sm btn-outline-primary" id="new-scene-button" type="button">New Scene</button>
-        </div>
+  <section class="card scene-card">
+    <div class="card-header scene-section-header">
+      <div class="scene-section-header-copy">
+        <strong>Scene Workspace</strong>
+        <div class="scene-help">Each saved scene becomes a HomeKit switch plus a companion volume control. Select a scene and edit it in the same workspace below.</div>
+        <div class="scene-inline-note mt-2">Save Scene Changes updates the selected scene here. Homebridge&apos;s footer Save button writes the full plugin config to disk.</div>
       </div>
-      <div class="card-body">
-        <div id="scene-list" class="scene-list"></div>
+      <div class="scene-section-actions">
+        <button class="btn btn-sm btn-outline-primary" id="new-scene-button" type="button">New Scene</button>
       </div>
-    </section>
+    </div>
+    <div class="card-body">
+      <div class="scene-workspace-grid">
+        <div class="scene-subpanel">
+          <div class="scene-subpanel-header">
+            <div class="scene-subpanel-copy">
+              <strong>Saved Scenes</strong>
+              <div class="scene-help">Pick a scene here to load its settings into the editor.</div>
+            </div>
+          </div>
+          <div id="scene-list" class="scene-list"></div>
+        </div>
 
-    <section class="card scene-card">
-      <div class="card-header scene-section-header">
-        <div class="scene-section-header-copy">
-          <strong>Scene Editor</strong>
-          <div class="scene-help">Stable Sonos IDs are stored under the hood; the UI keeps room selection friendly.</div>
-          <div class="scene-inline-note mt-2">Save Scene Changes updates this scene in the list above. Homebridge&apos;s footer Save button writes the full plugin config to disk.</div>
-        </div>
-        <div class="scene-section-actions">
-          <button class="btn btn-sm btn-outline-danger" id="delete-scene-button" type="button">Delete</button>
-          <button class="btn btn-sm btn-primary" id="save-scene-button" type="button">Save Scene Changes</button>
-        </div>
-      </div>
-      <div class="card-body">
-        <div class="row g-3">
+        <div class="scene-subpanel scene-editor-frame">
+          <div class="scene-subpanel-header">
+            <div class="scene-subpanel-copy">
+              <strong id="scene-editor-current" class="scene-editor-current">Editing: New Scene</strong>
+              <div class="scene-help">Stable Sonos IDs are stored under the hood; the UI keeps room selection friendly.</div>
+              <div class="scene-inline-note">The selected scene from the list is what you are editing below.</div>
+            </div>
+            <div class="scene-section-actions">
+              <button class="btn btn-sm btn-outline-danger" id="delete-scene-button" type="button">Delete</button>
+              <button class="btn btn-sm btn-primary" id="save-scene-button" type="button">Save Scene Changes</button>
+            </div>
+          </div>
+          <div class="row g-3">
           <div class="col-12">
             <label class="form-label" for="scene-name">
               <span class="scene-label-row">
@@ -748,7 +853,7 @@
                 <span>Auto Reset (ms)</span>
                 <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Auto Reset">
                   ?
-                  <span class="scene-tooltip">How long the HomeKit scene switch should stay on before it flips itself back off. This does not stop playback by itself.</span>
+                  <span class="scene-tooltip">How long the HomeKit scene switch should stay on before it flips itself back off visually. Set this to 0 to keep the switch on until you turn it off yourself. Auto Reset does not run the scene&apos;s off behavior.</span>
                 </span>
               </span>
             </label>
@@ -769,10 +874,11 @@
               <option value="ungroup">Ungroup</option>
             </select>
           </div>
+          </div>
         </div>
       </div>
-    </section>
-  </div>
+    </div>
+  </section>
 
   <section class="card scene-card">
     <div class="card-header">
@@ -803,6 +909,10 @@
       config: null,
       topology: null,
       draft: null,
+      volumeUi: {
+        coordinatorEnabled: false,
+        memberEnabled: {},
+      },
       activeSceneId: null,
       validation: null,
       lastRun: null,
@@ -811,6 +921,7 @@
 
     const elements = {
       sceneList: document.getElementById("scene-list"),
+      sceneEditorCurrent: document.getElementById("scene-editor-current"),
       sceneName: document.getElementById("scene-name"),
       sceneId: document.getElementById("scene-id"),
       householdSelect: document.getElementById("household-select"),
@@ -916,17 +1027,33 @@
         coordinatorPlayerId: safeScene.coordinatorPlayerId || "",
         memberPlayerIds: Array.isArray(safeScene.memberPlayerIds) ? Array.from(new Set(safeScene.memberPlayerIds)) : [],
         source: safeScene.source || { kind: "favorite", favoriteId: "" },
-        coordinatorVolume:
-          safeScene.coordinatorVolume === undefined || safeScene.coordinatorVolume === null
-            ? ""
-            : safeScene.coordinatorVolume,
-        playerVolumes: Array.isArray(safeScene.playerVolumes) ? safeScene.playerVolumes : [],
-        offBehavior: safeScene.offBehavior || { kind: "none" },
-        settleMs: safeScene.settleMs ?? 750,
-        retryCount: safeScene.retryCount ?? 3,
-        retryDelayMs: safeScene.retryDelayMs ?? 750,
-        autoResetMs: safeScene.autoResetMs ?? 1000,
+          coordinatorVolume:
+            safeScene.coordinatorVolume === undefined || safeScene.coordinatorVolume === null
+              ? ""
+              : safeScene.coordinatorVolume,
+          playerVolumes: Array.isArray(safeScene.playerVolumes) ? safeScene.playerVolumes : [],
+          offBehavior: safeScene.offBehavior || { kind: "none" },
+          settleMs: safeScene.settleMs ?? 750,
+          retryCount: safeScene.retryCount ?? 3,
+          retryDelayMs: safeScene.retryDelayMs ?? 750,
+          autoResetMs: safeScene.autoResetMs ?? 0,
+        };
+      }
+
+    function resetVolumeUiFromDraft() {
+      const memberEnabled = {};
+      for (const entry of state.draft?.playerVolumes || []) {
+        memberEnabled[entry.playerId] = true;
+      }
+      state.volumeUi = {
+        coordinatorEnabled: state.draft?.coordinatorVolume !== "",
+        memberEnabled,
       };
+    }
+
+    function updateEditorHeading() {
+      const name = (elements.sceneName?.value || state.draft?.name || "New Scene").trim() || "New Scene";
+      elements.sceneEditorCurrent.textContent = `Editing: ${name}`;
     }
 
     function getActiveHousehold() {
@@ -997,13 +1124,16 @@
       }
       draft.memberPlayerIds = selectedRoomIds.filter((playerId) => playerId !== draft.coordinatorPlayerId);
       const leadVolumeInput = elements.memberList.querySelector("input[data-coordinator-volume]");
-      draft.coordinatorVolume = leadVolumeInput && leadVolumeInput.value !== "" ? Number(leadVolumeInput.value) : undefined;
+      draft.coordinatorVolume = state.volumeUi.coordinatorEnabled && leadVolumeInput && leadVolumeInput.value !== ""
+        ? Number(leadVolumeInput.value)
+        : undefined;
       draft.settleMs = Number(elements.settleMs.value || 0);
       draft.retryCount = Number(elements.retryCount.value || 0);
       draft.retryDelayMs = Number(elements.retryDelayMs.value || 0);
       draft.autoResetMs = Number(elements.autoResetMs.value || 0);
       draft.offBehavior = { kind: elements.offBehavior.value };
       draft.playerVolumes = Array.from(elements.memberList.querySelectorAll("input[data-player-id]"))
+        .filter((input) => state.volumeUi.memberEnabled[input.dataset.playerId])
         .filter((input) => input.value !== "")
         .filter((input) => selectedRoomIds.includes(input.dataset.playerId) && input.dataset.playerId !== draft.coordinatorPlayerId)
         .map((input) => ({
@@ -1039,6 +1169,7 @@
       const scene = state.config.scenes[0] || normalizeScene({});
       state.activeSceneId = scene.id;
       state.draft = normalizeScene(scene);
+      resetVolumeUiFromDraft();
     }
 
     function renderSceneList() {
@@ -1051,21 +1182,22 @@
         return;
       }
 
-      state.config.scenes.forEach((scene) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = scene.id === state.activeSceneId ? "active" : "";
+        state.config.scenes.forEach((scene) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = scene.id === state.activeSceneId ? "active" : "";
         const coordinatorLabel = scene.coordinatorPlayerId
           ? ` - ${getPlayerNameForHousehold(scene.householdId, scene.coordinatorPlayerId)}`
           : "";
-        button.innerHTML = `<strong>${scene.name}</strong><div class="scene-help">${getHouseholdDisplayName(scene.householdId)}${coordinatorLabel}</div>`;
-        button.addEventListener("click", () => {
-          state.activeSceneId = scene.id;
-          state.draft = normalizeScene(scene);
-          state.validation = null;
-          state.lastRun = null;
-          render();
-        });
+          button.innerHTML = `<strong>${scene.name}</strong><div class="scene-help">${getHouseholdDisplayName(scene.householdId)}${coordinatorLabel}</div>`;
+          button.addEventListener("click", () => {
+            state.activeSceneId = scene.id;
+            state.draft = normalizeScene(scene);
+            resetVolumeUiFromDraft();
+            state.validation = null;
+            state.lastRun = null;
+            render();
+          });
         elements.sceneList.appendChild(button);
       });
     }
@@ -1167,6 +1299,7 @@
       state.draft.coordinatorPlayerId = coordinatorId;
       state.draft.memberPlayerIds = selectedRoomIds.filter((playerId) => playerId !== coordinatorId);
       const values = new Map((state.draft.playerVolumes || []).map((entry) => [entry.playerId, entry.volume]));
+      const leadOverrideEnabled = state.volumeUi.coordinatorEnabled || state.draft.coordinatorVolume !== "";
       const forcedSourceId = (state.draft.source?.kind === "line_in" || state.draft.source?.kind === "tv")
         ? state.draft.source.deviceId
         : "";
@@ -1174,16 +1307,18 @@
       elements.memberList.innerHTML = players.length === 0
         ? `<div class="scene-help">No rooms are available in this household.</div>`
         : players
-            .map(
-              (player) => {
-                const isForcedSource = forcedSourceId === player.id;
-                const isSelected = isForcedSource || selected.has(player.id);
-                const flags = [
-                  isForcedSource ? `<span class="scene-member-flag source">Source Room</span>` : "",
-                  isSelected && coordinatorId === player.id ? `<span class="scene-member-flag primary">Lead Room</span>` : "",
-                ].filter(Boolean).join("");
-                return `
-                <div class="scene-member-pill ${isSelected ? "selected" : ""}">
+              .map(
+                (player) => {
+                  const isForcedSource = forcedSourceId === player.id;
+                  const isSelected = isForcedSource || selected.has(player.id);
+                  const isLeadRoom = isSelected && coordinatorId === player.id;
+                  const memberOverrideEnabled = Boolean(state.volumeUi.memberEnabled[player.id] || values.has(player.id));
+                  const flags = [
+                    isForcedSource ? `<span class="scene-member-flag source">Source Room</span>` : "",
+                  ].filter(Boolean).join("");
+                  return `
+                <div class="scene-member-pill ${isSelected ? "selected" : ""} ${isLeadRoom ? "has-corner-flag" : ""}">
+                  ${isLeadRoom ? `<span class="scene-member-flag primary scene-member-corner-flag">Lead Room</span>` : ""}
                   <label class="scene-member-row scene-member-toggle">
                     <input class="form-check-input" data-member-checkbox type="checkbox" value="${player.id}" ${isSelected ? "checked" : ""} ${isForcedSource ? "disabled" : ""}>
                     <span class="scene-member-copy">
@@ -1192,32 +1327,58 @@
                       ${flags ? `<span class="scene-member-flags">${flags}</span>` : ""}
                     </span>
                   </label>
-                  ${isSelected && coordinatorId === player.id ? `
+                  ${isLeadRoom ? `
                     <div class="scene-member-volume">
-                      <label class="scene-member-volume-label" for="lead-volume-${player.id}">Lead Room Volume</label>
-                      <input
-                        class="form-control form-control-sm scene-member-volume-input"
-                        id="lead-volume-${player.id}"
-                        data-coordinator-volume="true"
-                        type="number"
-                        min="0"
-                        max="100"
-                        placeholder="Keep current"
-                        value="${state.draft.coordinatorVolume ?? ""}">
+                      <div class="scene-member-volume-header">
+                        <label class="scene-member-volume-label" for="lead-volume-${player.id}">Lead Room Volume</label>
+                        <button
+                          class="scene-member-volume-toggle ${leadOverrideEnabled ? "active" : ""}"
+                          data-volume-toggle="coordinator"
+                          type="button"
+                          aria-pressed="${leadOverrideEnabled ? "true" : "false"}">
+                          ${leadOverrideEnabled ? "Override On" : "Keep Current"}
+                        </button>
+                      </div>
+                      ${leadOverrideEnabled ? `
+                        <input
+                          class="form-control form-control-sm scene-member-volume-input"
+                          id="lead-volume-${player.id}"
+                          data-coordinator-volume="true"
+                          type="number"
+                          min="0"
+                          max="100"
+                          placeholder="Set volume"
+                          value="${state.draft.coordinatorVolume ?? ""}">
+                      ` : `
+                        <div class="scene-member-volume-note">Keeps this room at its current volume when the scene runs.</div>
+                      `}
                     </div>
                   ` : ""}
-                  ${isSelected && coordinatorId !== player.id ? `
+                  ${isSelected && !isLeadRoom ? `
                     <div class="scene-member-volume">
-                      <label class="scene-member-volume-label" for="member-volume-${player.id}">Volume Override</label>
-                      <input
-                        class="form-control form-control-sm scene-member-volume-input"
-                        id="member-volume-${player.id}"
-                        data-player-id="${player.id}"
-                        type="number"
-                        min="0"
-                        max="100"
-                        placeholder="Keep current"
-                        value="${values.get(player.id) ?? ""}">
+                      <div class="scene-member-volume-header">
+                        <label class="scene-member-volume-label" for="member-volume-${player.id}">Volume Override</label>
+                        <button
+                          class="scene-member-volume-toggle ${memberOverrideEnabled ? "active" : ""}"
+                          data-volume-toggle="${player.id}"
+                          type="button"
+                          aria-pressed="${memberOverrideEnabled ? "true" : "false"}">
+                          ${memberOverrideEnabled ? "Override On" : "Keep Current"}
+                        </button>
+                      </div>
+                      ${memberOverrideEnabled ? `
+                        <input
+                          class="form-control form-control-sm scene-member-volume-input"
+                          id="member-volume-${player.id}"
+                          data-player-id="${player.id}"
+                          type="number"
+                          min="0"
+                          max="100"
+                          placeholder="Set volume"
+                          value="${values.get(player.id) ?? ""}">
+                      ` : `
+                        <div class="scene-member-volume-note">Leaves this room at whatever volume it already has.</div>
+                      `}
                     </div>
                   ` : ""}
                 </div>
@@ -1396,13 +1557,14 @@
       renderCloudModeControls();
       elements.sceneName.value = state.draft.name || "";
       elements.sceneId.value = state.draft.id || "";
+      updateEditorHeading();
       renderHouseholdOptions();
       renderSourceControls();
       renderMemberOptions();
       elements.settleMs.value = state.draft.settleMs ?? 750;
       elements.retryCount.value = state.draft.retryCount ?? 3;
       elements.retryDelayMs.value = state.draft.retryDelayMs ?? 750;
-      elements.autoResetMs.value = state.draft.autoResetMs ?? 1000;
+      elements.autoResetMs.value = state.draft.autoResetMs ?? 0;
       elements.offBehavior.value = state.draft.offBehavior?.kind || "none";
     }
 
@@ -1497,6 +1659,7 @@
       state.config.scenes = state.config.scenes.filter((scene) => scene.id !== state.draft.id);
       state.activeSceneId = state.config.scenes[0]?.id || null;
       state.draft = state.config.scenes[0] ? normalizeScene(state.config.scenes[0]) : normalizeScene({});
+      resetVolumeUiFromDraft();
       await persistConfig(true);
       render();
     }
@@ -1507,6 +1670,7 @@
         id: randomId(),
         householdId: state.topology?.households[0]?.id || state.config.defaultHouseholdId || "",
       });
+      resetVolumeUiFromDraft();
       state.validation = null;
       state.lastRun = null;
       render();
@@ -1583,10 +1747,42 @@
           return;
         }
 
-        if (target.matches("input[data-player-id]")) {
+        if (target.matches("input[data-player-id], input[data-coordinator-volume]")) {
           serializeDraft();
         }
       });
+
+      elements.memberList.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+
+        const toggle = target.closest("button[data-volume-toggle]");
+        if (!(toggle instanceof HTMLButtonElement)) {
+          return;
+        }
+
+        serializeDraft();
+        const toggleId = toggle.dataset.volumeToggle;
+        if (toggleId === "coordinator") {
+          state.volumeUi.coordinatorEnabled = !state.volumeUi.coordinatorEnabled;
+          if (!state.volumeUi.coordinatorEnabled) {
+            state.draft.coordinatorVolume = "";
+          }
+          renderMemberOptions();
+          return;
+        }
+
+        state.volumeUi.memberEnabled[toggleId] = !state.volumeUi.memberEnabled[toggleId];
+        if (!state.volumeUi.memberEnabled[toggleId]) {
+          delete state.volumeUi.memberEnabled[toggleId];
+          state.draft.playerVolumes = state.draft.playerVolumes.filter((entry) => entry.playerId !== toggleId);
+        }
+        renderMemberOptions();
+      });
+
+      elements.sceneName.addEventListener("input", updateEditorHeading);
 
       elements.householdSelect.addEventListener("change", () => {
         serializeDraft();
@@ -1637,6 +1833,7 @@
 
       state.activeSceneId = state.config.scenes[0]?.id || null;
       state.draft = state.config.scenes[0] ? normalizeScene(state.config.scenes[0]) : normalizeScene({});
+      resetVolumeUiFromDraft();
       render();
       await discover();
     }

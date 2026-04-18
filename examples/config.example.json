@@ -50,7 +50,7 @@
           "settleMs": 750,
           "retryCount": 3,
           "retryDelayMs": 750,
-          "autoResetMs": 1000
+        "autoResetMs": 0
         }
       ]
     }
