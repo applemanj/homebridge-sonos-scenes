@@ -3,6 +3,7 @@ import { normalizePlatformConfig } from "./config";
 import { DiscoveryService } from "./discoveryService";
 import { StructuredLogger } from "./logger";
 import { SceneRunner } from "./sceneRunner";
+import { SceneSpeakerAccessory } from "./accessories/sceneSpeaker";
 import { SceneSwitchAccessory } from "./accessories/sceneSwitch";
 import { createTransport } from "./transports";
 import type { SceneDefinition, SceneRunResult, SceneTrigger, ScenesPlatformConfig } from "./types";
@@ -20,7 +21,8 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
   private readonly sceneRunner: SceneRunner;
   private readonly transport;
   private readonly cachedAccessories = new Map<string, PlatformAccessory>();
-  private readonly sceneAccessories = new Map<string, SceneSwitchAccessory>();
+  private readonly switchAccessories = new Map<string, SceneSwitchAccessory>();
+  private readonly speakerAccessories = new Map<string, SceneSpeakerAccessory>();
 
   constructor(
     public readonly log: Logger,
@@ -71,28 +73,57 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
     return this.config.scenes.find((scene) => scene.id === sceneId);
   }
 
+  async getSceneVolume(sceneId: string): Promise<number> {
+    const scene = this.getRequiredScene(sceneId);
+    if (this.usesGroupAudio(scene)) {
+      return this.transport.getGroupVolume(scene.householdId, scene.coordinatorPlayerId);
+    }
+
+    return this.transport.getPlayerVolume(scene.householdId, scene.coordinatorPlayerId);
+  }
+
+  async setSceneVolume(sceneId: string, volume: number): Promise<void> {
+    const scene = this.getRequiredScene(sceneId);
+    if (this.usesGroupAudio(scene)) {
+      await this.transport.setGroupVolume(scene.householdId, scene.coordinatorPlayerId, volume);
+      return;
+    }
+
+    await this.transport.setPlayerVolume(scene.householdId, scene.coordinatorPlayerId, volume);
+  }
+
+  async getSceneMuted(sceneId: string): Promise<boolean> {
+    const scene = this.getRequiredScene(sceneId);
+    if (this.usesGroupAudio(scene)) {
+      return this.transport.getGroupMuted(scene.householdId, scene.coordinatorPlayerId);
+    }
+
+    return this.transport.getPlayerMuted(scene.householdId, scene.coordinatorPlayerId);
+  }
+
+  async setSceneMuted(sceneId: string, muted: boolean): Promise<void> {
+    const scene = this.getRequiredScene(sceneId);
+    if (this.usesGroupAudio(scene)) {
+      await this.transport.setGroupMuted(scene.householdId, scene.coordinatorPlayerId, muted);
+      return;
+    }
+
+    await this.transport.setPlayerMuted(scene.householdId, scene.coordinatorPlayerId, muted);
+  }
+
   private async syncAccessories(): Promise<void> {
     this.logger.info(`Syncing ${this.config.scenes.length} configured Sonos scene accessory(s).`);
     const activeAccessoryIds = new Set<string>();
 
     for (const scene of this.config.scenes) {
-      const uuid = this.api.hap.uuid.generate(`${PLUGIN_NAME}:${scene.id}`);
-      activeAccessoryIds.add(uuid);
-      let accessory = this.cachedAccessories.get(uuid);
+      const switchUuid = this.api.hap.uuid.generate(`${PLUGIN_NAME}:${scene.id}:switch`);
+      const speakerUuid = this.api.hap.uuid.generate(`${PLUGIN_NAME}:${scene.id}:speaker`);
+      activeAccessoryIds.add(switchUuid);
+      activeAccessoryIds.add(speakerUuid);
 
-      if (!accessory) {
-        accessory = new this.api.platformAccessory(scene.name, uuid);
-        this.cachedAccessories.set(uuid, accessory);
-        const wrapper = new SceneSwitchAccessory(this, accessory, scene);
-        this.sceneAccessories.set(scene.id, wrapper);
-        this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-        continue;
-      }
-
-      const wrapper = this.sceneAccessories.get(scene.id) ?? new SceneSwitchAccessory(this, accessory, scene);
-      wrapper.updateScene(scene);
-      this.sceneAccessories.set(scene.id, wrapper);
-      this.api.updatePlatformAccessories([accessory]);
+      const switchAccessory = this.syncSwitchAccessory(scene, switchUuid);
+      const speakerAccessory = this.syncSpeakerAccessory(scene, speakerUuid);
+      this.api.updatePlatformAccessories([switchAccessory, speakerAccessory]);
     }
 
     const staleAccessories = Array.from(this.cachedAccessories.entries())
@@ -104,12 +135,7 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
       for (const accessory of staleAccessories) {
         this.cachedAccessories.delete(accessory.UUID);
       }
-      for (const [sceneId, wrapper] of this.sceneAccessories.entries()) {
-        if (!this.config.scenes.some((scene) => scene.id === sceneId)) {
-          void wrapper;
-          this.sceneAccessories.delete(sceneId);
-        }
-      }
+      this.pruneWrapperMaps();
     }
 
     try {
@@ -118,5 +144,70 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
     } catch (error) {
       this.logger.warn(`Initial discovery failed: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  private syncSwitchAccessory(scene: SceneDefinition, uuid: string): PlatformAccessory {
+    let accessory = this.cachedAccessories.get(uuid);
+
+    if (!accessory) {
+      accessory = new this.api.platformAccessory(scene.name, uuid);
+      this.cachedAccessories.set(uuid, accessory);
+      const wrapper = new SceneSwitchAccessory(this, accessory, scene);
+      this.switchAccessories.set(scene.id, wrapper);
+      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+      return accessory;
+    }
+
+    const wrapper = this.switchAccessories.get(scene.id) ?? new SceneSwitchAccessory(this, accessory, scene);
+    wrapper.updateScene(scene);
+    this.switchAccessories.set(scene.id, wrapper);
+    return accessory;
+  }
+
+  private syncSpeakerAccessory(scene: SceneDefinition, uuid: string): PlatformAccessory {
+    let accessory = this.cachedAccessories.get(uuid);
+
+    if (!accessory) {
+      accessory = new this.api.platformAccessory(`${scene.name} Volume`, uuid);
+      this.cachedAccessories.set(uuid, accessory);
+      const wrapper = new SceneSpeakerAccessory(this, accessory, scene);
+      this.speakerAccessories.set(scene.id, wrapper);
+      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+      return accessory;
+    }
+
+    const wrapper = this.speakerAccessories.get(scene.id) ?? new SceneSpeakerAccessory(this, accessory, scene);
+    wrapper.updateScene(scene);
+    this.speakerAccessories.set(scene.id, wrapper);
+    return accessory;
+  }
+
+  private pruneWrapperMaps(): void {
+    const activeSceneIds = new Set(this.config.scenes.map((scene) => scene.id));
+
+    for (const sceneId of this.switchAccessories.keys()) {
+      if (!activeSceneIds.has(sceneId)) {
+        this.switchAccessories.delete(sceneId);
+      }
+    }
+
+    for (const sceneId of this.speakerAccessories.keys()) {
+      if (!activeSceneIds.has(sceneId)) {
+        this.speakerAccessories.delete(sceneId);
+      }
+    }
+  }
+
+  private getRequiredScene(sceneId: string): SceneDefinition {
+    const scene = this.getScene(sceneId);
+    if (!scene) {
+      throw new Error(`Scene "${sceneId}" is not configured.`);
+    }
+
+    return scene;
+  }
+
+  private usesGroupAudio(scene: SceneDefinition): boolean {
+    return scene.memberPlayerIds.length > 0;
   }
 }

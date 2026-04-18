@@ -45,11 +45,31 @@ class FakeTransport implements SonosTransport {
     this.calls.push(`loadFavorite:${coordinatorPlayerId}:${favoriteId}`);
   }
 
+  async getGroupVolume(): Promise<number> {
+    return 0;
+  }
+
   async setGroupVolume(): Promise<void> {}
+
+  async getPlayerVolume(): Promise<number> {
+    return 0;
+  }
 
   async setPlayerVolume(_householdId: string, playerId: string, volume: number): Promise<void> {
     this.calls.push(`setPlayerVolume:${playerId}:${volume}`);
   }
+
+  async getGroupMuted(): Promise<boolean> {
+    return false;
+  }
+
+  async setGroupMuted(): Promise<void> {}
+
+  async getPlayerMuted(): Promise<boolean> {
+    return false;
+  }
+
+  async setPlayerMuted(): Promise<void> {}
 
   async ungroup(_householdId: string, coordinatorPlayerId: string, memberPlayerIds?: string[]): Promise<void> {
     this.calls.push(`ungroup:${coordinatorPlayerId}:${(memberPlayerIds ?? []).join(",")}`);

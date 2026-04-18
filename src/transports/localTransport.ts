@@ -32,6 +32,17 @@ interface LivePlayerRecord {
   description?: SonosDeviceDescription;
 }
 
+interface SonosAudioControls {
+  getVolume(): Promise<number>;
+  getMuted(): Promise<boolean>;
+  setMuted(muted: boolean): Promise<void>;
+}
+
+interface FixtureAudioState {
+  volume: number;
+  muted: boolean;
+}
+
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -200,6 +211,20 @@ function normalizeFixtureSnapshot(input: TopologySnapshot): TopologySnapshot {
   };
 }
 
+function buildFixtureAudioState(snapshot: TopologySnapshot): Map<string, FixtureAudioState> {
+  return new Map(
+    snapshot.households.flatMap((household) =>
+      household.players.map((player) => [
+        player.id,
+        {
+          volume: 0,
+          muted: false,
+        } satisfies FixtureAudioState,
+      ] as const),
+    ),
+  );
+}
+
 function unique<T>(values: T[]): T[] {
   return Array.from(new Set(values));
 }
@@ -277,6 +302,7 @@ export class LocalSonosTransport implements SonosTransport {
   public readonly kind = "local";
   private livePlayers = new Map<string, LivePlayerRecord>();
   private fixtureState = normalizeFixtureSnapshot(sampleTopology);
+  private fixturePlayerAudio = buildFixtureAudioState(this.fixtureState);
   private fixtureLoaded = false;
   private householdRoots = new Map<string, Sonos>();
   private lastSnapshot = normalizeFixtureSnapshot(sampleTopology);
@@ -467,8 +493,39 @@ export class LocalSonosTransport implements SonosTransport {
     }
   }
 
+  async getGroupVolume(householdId: string, coordinatorPlayerId: string): Promise<number> {
+    const snapshot = await this.discoverTopology();
+    const household = this.requireHousehold(snapshot, householdId);
+    const group = household.groups.find((item) => item.coordinatorId === coordinatorPlayerId)
+      ?? household.groups.find((item) => item.playerIds.includes(coordinatorPlayerId));
+
+    if (!group) {
+      return this.getPlayerVolume(householdId, coordinatorPlayerId);
+    }
+
+    const volumes = await Promise.all(group.playerIds.map((playerId) => this.getPlayerVolume(householdId, playerId)));
+    if (volumes.length === 0) {
+      return 0;
+    }
+
+    return Math.max(0, Math.min(100, Math.round(volumes.reduce((sum, value) => sum + value, 0) / volumes.length)));
+  }
+
+  async getPlayerVolume(householdId: string, playerId: string): Promise<number> {
+    if (this.livePlayers.size === 0) {
+      this.requireHousehold(await this.loadFixtureSnapshot(), householdId);
+      return this.fixtureAudioState(playerId).volume;
+    }
+
+    this.requireHousehold(await this.discoverTopology(), householdId);
+    const player = this.requireLiveRecord(playerId);
+    return Math.max(0, Math.min(100, Math.round(await this.audioDevice(player.device).getVolume())));
+  }
+
   async setPlayerVolume(householdId: string, playerId: string, volume: number): Promise<void> {
     if (this.livePlayers.size === 0) {
+      this.requireHousehold(await this.loadFixtureSnapshot(), householdId);
+      this.fixtureAudioState(playerId).volume = Math.max(0, Math.min(100, Math.round(volume)));
       this.touchFixture(householdId);
       return;
     }
@@ -476,6 +533,60 @@ export class LocalSonosTransport implements SonosTransport {
     this.requireHousehold(await this.discoverTopology(), householdId);
     const player = this.requireLiveRecord(playerId);
     await player.device.setVolume(Math.max(0, Math.min(100, Math.round(volume))));
+  }
+
+  async getGroupMuted(householdId: string, coordinatorPlayerId: string): Promise<boolean> {
+    const snapshot = await this.discoverTopology();
+    const household = this.requireHousehold(snapshot, householdId);
+    const group = household.groups.find((item) => item.coordinatorId === coordinatorPlayerId)
+      ?? household.groups.find((item) => item.playerIds.includes(coordinatorPlayerId));
+
+    if (!group) {
+      return this.getPlayerMuted(householdId, coordinatorPlayerId);
+    }
+
+    const states = await Promise.all(group.playerIds.map((playerId) => this.getPlayerMuted(householdId, playerId)));
+    return states.length > 0 && states.every(Boolean);
+  }
+
+  async setGroupMuted(householdId: string, coordinatorPlayerId: string, muted: boolean): Promise<void> {
+    const snapshot = await this.discoverTopology();
+    const household = this.requireHousehold(snapshot, householdId);
+    const group = household.groups.find((item) => item.coordinatorId === coordinatorPlayerId)
+      ?? household.groups.find((item) => item.playerIds.includes(coordinatorPlayerId));
+
+    if (!group) {
+      await this.setPlayerMuted(householdId, coordinatorPlayerId, muted);
+      return;
+    }
+
+    for (const playerId of group.playerIds) {
+      await this.setPlayerMuted(householdId, playerId, muted);
+    }
+  }
+
+  async getPlayerMuted(householdId: string, playerId: string): Promise<boolean> {
+    if (this.livePlayers.size === 0) {
+      this.requireHousehold(await this.loadFixtureSnapshot(), householdId);
+      return this.fixtureAudioState(playerId).muted;
+    }
+
+    this.requireHousehold(await this.discoverTopology(), householdId);
+    const player = this.requireLiveRecord(playerId);
+    return await this.audioDevice(player.device).getMuted();
+  }
+
+  async setPlayerMuted(householdId: string, playerId: string, muted: boolean): Promise<void> {
+    if (this.livePlayers.size === 0) {
+      this.requireHousehold(await this.loadFixtureSnapshot(), householdId);
+      this.fixtureAudioState(playerId).muted = muted;
+      this.touchFixture(householdId);
+      return;
+    }
+
+    this.requireHousehold(await this.discoverTopology(), householdId);
+    const player = this.requireLiveRecord(playerId);
+    await this.audioDevice(player.device).setMuted(muted);
   }
 
   async ungroup(householdId: string, coordinatorPlayerId: string, memberPlayerIds?: string[]): Promise<void> {
@@ -675,6 +786,7 @@ export class LocalSonosTransport implements SonosTransport {
     const resolvedFixturePath = resolveFixturePath(this.config.fixturePath);
     if (!resolvedFixturePath) {
       this.fixtureState = normalizeFixtureSnapshot(this.fixtureState);
+      this.fixturePlayerAudio = buildFixtureAudioState(this.fixtureState);
       this.fixtureLoaded = true;
       return clone(this.fixtureState);
     }
@@ -683,10 +795,12 @@ export class LocalSonosTransport implements SonosTransport {
       const raw = await readFile(resolvedFixturePath, "utf8");
       const parsed = JSON.parse(raw) as TopologySnapshot;
       this.fixtureState = normalizeFixtureSnapshot(parsed);
+      this.fixturePlayerAudio = buildFixtureAudioState(this.fixtureState);
       this.fixtureLoaded = true;
       return clone(this.fixtureState);
     } catch {
       this.fixtureState = normalizeFixtureSnapshot(sampleTopology);
+      this.fixturePlayerAudio = buildFixtureAudioState(this.fixtureState);
       this.fixtureLoaded = true;
       return clone(this.fixtureState);
     }
@@ -818,6 +932,24 @@ export class LocalSonosTransport implements SonosTransport {
       origin: "fixture",
     };
     this.lastSnapshot = clone(this.fixtureState);
+  }
+
+  private fixtureAudioState(playerId: string): FixtureAudioState {
+    const existing = this.fixturePlayerAudio.get(playerId);
+    if (existing) {
+      return existing;
+    }
+
+    const state: FixtureAudioState = {
+      volume: 0,
+      muted: false,
+    };
+    this.fixturePlayerAudio.set(playerId, state);
+    return state;
+  }
+
+  private audioDevice(device: Sonos): Sonos & SonosAudioControls {
+    return device as Sonos & SonosAudioControls;
   }
 }
 

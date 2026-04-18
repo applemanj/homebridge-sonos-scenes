@@ -197,8 +197,14 @@ export interface SonosTransport {
     deviceId: string,
     playOnCompletion?: boolean,
   ): Promise<void>;
+  getGroupVolume(householdId: string, coordinatorPlayerId: string): Promise<number>;
   setGroupVolume(householdId: string, coordinatorPlayerId: string, volume: number): Promise<void>;
+  getPlayerVolume(householdId: string, playerId: string): Promise<number>;
   setPlayerVolume(householdId: string, playerId: string, volume: number): Promise<void>;
+  getGroupMuted(householdId: string, coordinatorPlayerId: string): Promise<boolean>;
+  setGroupMuted(householdId: string, coordinatorPlayerId: string, muted: boolean): Promise<void>;
+  getPlayerMuted(householdId: string, playerId: string): Promise<boolean>;
+  setPlayerMuted(householdId: string, playerId: string, muted: boolean): Promise<void>;
   ungroup(householdId: string, coordinatorPlayerId: string, memberPlayerIds?: string[]): Promise<void>;
   subscribe?(
     listener: (snapshot: TopologySnapshot) => void,

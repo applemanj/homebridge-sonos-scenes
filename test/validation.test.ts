@@ -19,8 +19,14 @@ const fakeTransport: SonosTransport = {
   async modifyGroupMembers() {},
   async loadLineIn() {},
   async loadFavorite() {},
+  async getGroupVolume() { return 0; },
   async setGroupVolume() {},
+  async getPlayerVolume() { return 0; },
   async setPlayerVolume() {},
+  async getGroupMuted() { return false; },
+  async setGroupMuted() {},
+  async getPlayerMuted() { return false; },
+  async setPlayerMuted() {},
   async ungroup() {},
 };
 
