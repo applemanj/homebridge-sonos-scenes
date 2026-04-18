@@ -307,10 +307,20 @@
     display: block;
   }
 
+  .scene-member-pill.selected {
+    border-color: rgba(10, 132, 255, 0.34);
+    background: rgba(10, 132, 255, 0.07);
+    box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.08);
+  }
+
   .scene-member-row {
     display: flex;
     align-items: flex-start;
     gap: 0.65rem;
+  }
+
+  .scene-member-toggle {
+    cursor: pointer;
   }
 
   .scene-member-pill .form-check-input {
@@ -334,6 +344,25 @@
     color: #667085;
     font-size: 0.86rem;
     line-height: 1.35;
+  }
+
+  .scene-member-volume {
+    display: grid;
+    gap: 0.35rem;
+    margin-top: 0.65rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid rgba(22, 32, 51, 0.08);
+  }
+
+  .scene-member-volume-label {
+    color: #556579;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .scene-member-volume-input {
+    max-width: 132px;
   }
 
   .scene-log {
@@ -632,7 +661,7 @@
                 <span>Group Members</span>
                 <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Group Members">
                   ?
-                  <span class="scene-tooltip">Additional rooms to join the coordinator when the scene runs. Leave all unchecked for a single-room scene.</span>
+                  <span class="scene-tooltip">Additional rooms to join the coordinator when the scene runs. Leave all unchecked for a single-room scene. Selected member tiles can also carry their own optional volume override.</span>
                 </span>
               </span>
             </label>
@@ -737,18 +766,6 @@
               <option value="ungroup">Ungroup</option>
             </select>
           </div>
-          <div class="col-12">
-            <label class="form-label">
-              <span class="scene-label-row">
-                <span>Per-room Volumes</span>
-                <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Per-room Volumes">
-                  ?
-                  <span class="scene-tooltip">Optional volume overrides for specific member rooms. Leave a room blank here to keep its current volume or let the group volume behavior apply.</span>
-                </span>
-              </span>
-            </label>
-            <div id="volume-list" class="scene-member-grid"></div>
-          </div>
         </div>
       </div>
     </section>
@@ -804,7 +821,6 @@
       retryDelayMs: document.getElementById("retry-delay-ms"),
       autoResetMs: document.getElementById("auto-reset-ms"),
       offBehavior: document.getElementById("off-behavior"),
-      volumeList: document.getElementById("volume-list"),
       validationOutput: document.getElementById("validation-output"),
       logOutput: document.getElementById("log-output"),
       discoverySummary: document.getElementById("discovery-summary"),
@@ -956,7 +972,7 @@
       draft.retryDelayMs = Number(elements.retryDelayMs.value || 0);
       draft.autoResetMs = Number(elements.autoResetMs.value || 0);
       draft.offBehavior = { kind: elements.offBehavior.value };
-      draft.playerVolumes = Array.from(elements.volumeList.querySelectorAll("input[data-player-id]"))
+      draft.playerVolumes = Array.from(elements.memberList.querySelectorAll("input[data-player-id]"))
         .filter((input) => input.value !== "")
         .map((input) => ({
           playerId: input.dataset.playerId,
@@ -1127,22 +1143,40 @@
       const household = getActiveHousehold();
       const coordinatorId = state.draft.coordinatorPlayerId;
       const selected = new Set(state.draft.memberPlayerIds.filter((playerId) => playerId !== coordinatorId));
+      const values = new Map((state.draft.playerVolumes || []).map((entry) => [entry.playerId, entry.volume]));
       const players = (household?.players || []).filter((player) => player.id !== coordinatorId);
       elements.memberList.innerHTML = players.length === 0
         ? `<div class="scene-help">No additional players are available for grouping.</div>`
         : players
             .map(
-              (player) => `
-                <label class="scene-member-pill">
-                  <span class="scene-member-row">
-                    <input class="form-check-input" type="checkbox" value="${player.id}" ${selected.has(player.id) ? "checked" : ""}>
+              (player) => {
+                const isSelected = selected.has(player.id);
+                return `
+                <div class="scene-member-pill ${isSelected ? "selected" : ""}">
+                  <label class="scene-member-row scene-member-toggle">
+                    <input class="form-check-input" data-member-checkbox type="checkbox" value="${player.id}" ${isSelected ? "checked" : ""}>
                     <span class="scene-member-copy">
                       <span class="scene-member-title">${player.name}</span>
                       <span class="scene-member-meta">${player.model || "Unknown model"} - ${((player.sourceOptions || []).join(", ") || "favorite").replaceAll("_", " ")}</span>
                     </span>
-                  </span>
-                </label>
-              `,
+                  </label>
+                  ${isSelected ? `
+                    <div class="scene-member-volume">
+                      <label class="scene-member-volume-label" for="member-volume-${player.id}">Volume Override</label>
+                      <input
+                        class="form-control form-control-sm scene-member-volume-input"
+                        id="member-volume-${player.id}"
+                        data-player-id="${player.id}"
+                        type="number"
+                        min="0"
+                        max="100"
+                        placeholder="Keep current"
+                        value="${values.get(player.id) ?? ""}">
+                    </div>
+                  ` : ""}
+                </div>
+              `;
+              },
             )
             .join("");
     }
@@ -1199,22 +1233,6 @@
       elements.sourceTarget.innerHTML = sourcePlayers
         .map((player) => `<option value="${player.id}" ${player.id === selectedPlayer ? "selected" : ""}>${player.name}</option>`)
         .join("");
-    }
-
-    function renderVolumeControls() {
-      const household = getActiveHousehold();
-      const selectedMembers = state.draft.memberPlayerIds || [];
-      const values = new Map((state.draft.playerVolumes || []).map((entry) => [entry.playerId, entry.volume]));
-      elements.volumeList.innerHTML = selectedMembers.length === 0
-        ? `<div class="scene-help">Select one or more member rooms to configure per-room volume overrides.</div>`
-        : selectedMembers
-            .map((playerId) => `
-              <label class="scene-member-pill">
-                <span class="scene-member-title d-block mb-1">${getPlayerName(playerId)}</span>
-                <input class="form-control" data-player-id="${playerId}" type="number" min="0" max="100" value="${values.get(playerId) ?? ""}">
-              </label>
-            `)
-            .join("");
     }
 
     function renderValidation() {
@@ -1342,7 +1360,6 @@
       elements.retryDelayMs.value = state.draft.retryDelayMs ?? 750;
       elements.autoResetMs.value = state.draft.autoResetMs ?? 1000;
       elements.offBehavior.value = state.draft.offBehavior?.kind || "none";
-      renderVolumeControls();
     }
 
     function render() {
@@ -1508,6 +1525,23 @@
           renderBrokerStatus();
           stageConfigUpdate();
         });
+      });
+
+      elements.memberList.addEventListener("change", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) {
+          return;
+        }
+
+        if (target.matches("input[data-member-checkbox]")) {
+          serializeDraft();
+          renderMemberOptions();
+          return;
+        }
+
+        if (target.matches("input[data-player-id]")) {
+          serializeDraft();
+        }
       });
 
       elements.householdSelect.addEventListener("change", () => {

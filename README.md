@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/homebridge-sonos-scenes-icon-512x512.png" alt="homebridge-sonos-scenes icon" width="164">
+  <img src="docs/assets/icon-512.png" alt="homebridge-sonos-scenes icon" width="164">
 </p>
 
 <h1 align="center">homebridge-sonos-scenes</h1>
@@ -7,6 +7,9 @@
 <p align="center">Homebridge plugin for Sonos workflow scenes and orchestration.</p>
 
 `homebridge-sonos-scenes` is a Homebridge plugin scaffold for Sonos workflow scenes.
+
+> [!IMPORTANT]
+> This project is in an active early-testing phase. The local-first scene workflow is usable and published to npm, but cloud-backed Sonos playback is still planned work and some edge cases are still being hardened. If you try the plugin, please share bugs, UI feedback, and Sonos compatibility notes in [GitHub Issues](https://github.com/applemanj/homebridge-sonos-scenes/issues). Real-world feedback is especially helpful right now.
 
 The goal is not general Sonos control. The goal is a clean way to trigger multi-step Sonos workflows from Apple Home, such as:
 
