@@ -30,7 +30,6 @@
   .scene-mode-grid {
     display: grid;
     gap: 1rem;
-    grid-template-columns: minmax(280px, 1.1fr) minmax(320px, 1.3fr);
   }
 
   .scene-mode-panel {
@@ -44,6 +43,11 @@
   .scene-mode-panel .card-header {
     border-bottom: 1px solid rgba(22, 32, 51, 0.08);
     background: rgba(255, 255, 255, 0.65);
+  }
+
+  .scene-mode-panel .card-body {
+    display: grid;
+    gap: 1rem;
   }
 
   .scene-mode-choice {
@@ -80,6 +84,15 @@
   .scene-cloud-settings {
     display: grid;
     gap: 1rem;
+  }
+
+  .scene-mode-expanded {
+    display: grid;
+    gap: 1rem;
+    border: 1px solid rgba(10, 132, 255, 0.16);
+    border-radius: 0.95rem;
+    padding: 1rem;
+    background: rgba(10, 132, 255, 0.04);
   }
 
   .scene-cloud-hidden {
@@ -131,6 +144,11 @@
   .scene-card .card-header {
     border-bottom: 1px solid rgba(22, 32, 51, 0.08);
     background: rgba(255, 255, 255, 0.65);
+  }
+
+  .scene-card .scene-help,
+  .scene-mode-panel .scene-help {
+    color: #667085;
   }
 
   .scene-list button {
@@ -202,10 +220,6 @@
     border-color: rgba(168, 85, 247, 0.34);
   }
 
-  .scene-action-card.save {
-    border-color: rgba(46, 213, 115, 0.34);
-  }
-
   .scene-action-kicker {
     display: inline-flex;
     align-items: center;
@@ -231,11 +245,6 @@
   .scene-action-card.test .scene-action-kicker {
     background: rgba(168, 85, 247, 0.18);
     color: #d8b4fe;
-  }
-
-  .scene-action-card.save .scene-action-kicker {
-    background: rgba(46, 213, 115, 0.16);
-    color: #78f0a9;
   }
 
   .scene-action-card strong {
@@ -324,13 +333,80 @@
     font-size: 0.92rem;
   }
 
-  @media (max-width: 960px) {
-    .scene-mode-grid {
-      grid-template-columns: 1fr;
-    }
+  .scene-inline-note {
+    color: #667085;
+    font-size: 0.88rem;
+    line-height: 1.45;
+  }
 
+  .scene-label-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  .scene-info-tag {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    border-radius: 999px;
+    border: 1px solid rgba(10, 132, 255, 0.35);
+    background: rgba(10, 132, 255, 0.08);
+    color: #0a84ff;
+    font-size: 0.74rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: help;
+  }
+
+  .scene-info-tag:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.18);
+  }
+
+  .scene-tooltip {
+    position: absolute;
+    top: 50%;
+    left: calc(100% + 0.55rem);
+    transform: translateY(-50%);
+    width: min(320px, 70vw);
+    padding: 0.65rem 0.75rem;
+    border-radius: 0.7rem;
+    border: 1px solid rgba(170, 198, 255, 0.28);
+    background: #162033;
+    color: #f7fbff;
+    box-shadow: 0 18px 40px rgba(8, 15, 30, 0.28);
+    font-size: 0.82rem;
+    font-weight: 400;
+    line-height: 1.45;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    z-index: 30;
+  }
+
+  .scene-info-tag:hover .scene-tooltip,
+  .scene-info-tag:focus-visible .scene-tooltip {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  @media (max-width: 960px) {
     .scene-grid {
       grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .scene-tooltip {
+      top: calc(100% + 0.45rem);
+      left: 0;
+      transform: none;
+      width: min(280px, 78vw);
     }
   }
 </style>
@@ -363,16 +439,11 @@
         <strong>Run Test</strong>
         <span>Actually runs the scene on your Sonos system now so you can confirm the grouping, source, and volume behavior.</span>
       </button>
-      <button class="scene-action-card save" id="save-homebridge-button" type="button" title="Write the current scene configuration into Homebridge.">
-        <div class="scene-action-kicker">Persist</div>
-        <strong>Save To Homebridge</strong>
-        <span>Saves the current scenes into Homebridge so they persist and appear as HomeKit switch accessories.</span>
-      </button>
     </div>
   </section>
 
   <section class="scene-mode-grid">
-    <section class="scene-mode-panel">
+    <section class="scene-mode-panel card scene-card">
       <div class="card-header d-flex justify-content-between align-items-center">
         <div>
           <strong>Execution Mode</strong>
@@ -399,31 +470,50 @@
             </span>
           </span>
         </label>
-      </div>
-    </section>
-
-    <section class="scene-mode-panel">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <div>
-          <strong>Cloud Broker</strong>
-          <div class="scene-help">Optional. Only needed if you choose Local + Cloud and run your own broker service.</div>
-        </div>
-        <button class="btn btn-sm btn-outline-primary" id="check-broker-button" type="button">Check Broker</button>
-      </div>
-      <div class="card-body scene-cloud-settings">
-        <div id="cloud-broker-copy" class="scene-help">Local Only is active. Broker settings are preserved, but they are not used until you switch modes.</div>
-        <div id="cloud-broker-fields" class="scene-cloud-hidden">
+        <div id="cloud-broker-panel" class="scene-mode-expanded scene-cloud-hidden">
+          <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+            <div>
+              <strong>Cloud Broker</strong>
+              <div id="cloud-broker-copy" class="scene-help mb-0">Only needed if you choose Local + Cloud and run your own broker service.</div>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" id="check-broker-button" type="button">Check Broker</button>
+          </div>
+          <div id="cloud-broker-fields" class="scene-cloud-settings">
           <div class="row g-3">
             <div class="col-12">
-              <label class="form-label" for="broker-url">Broker URL</label>
+              <label class="form-label" for="broker-url">
+                <span class="scene-label-row">
+                  <span>Broker URL</span>
+                  <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Broker URL">
+                    ?
+                    <span class="scene-tooltip">The base URL for your self-hosted Sonos cloud broker. This is only used in Local + Cloud mode.</span>
+                  </span>
+                </span>
+              </label>
               <input class="form-control" id="broker-url" type="url" placeholder="https://sonos-broker.example.com">
             </div>
             <div class="col-md-8">
-              <label class="form-label" for="broker-api-key">Broker API Key</label>
+              <label class="form-label" for="broker-api-key">
+                <span class="scene-label-row">
+                  <span>Broker API Key</span>
+                  <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Broker API Key">
+                    ?
+                    <span class="scene-tooltip">Optional bearer token or shared secret if your broker requires authentication. Leave blank if your broker does not use one.</span>
+                  </span>
+                </span>
+              </label>
               <input class="form-control" id="broker-api-key" type="password" placeholder="Optional bearer token">
             </div>
             <div class="col-md-4">
-              <label class="form-label" for="broker-timeout-ms">Timeout (ms)</label>
+              <label class="form-label" for="broker-timeout-ms">
+                <span class="scene-label-row">
+                  <span>Timeout (ms)</span>
+                  <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain broker timeout">
+                    ?
+                    <span class="scene-tooltip">How long Homebridge should wait for the broker to respond before treating the request as failed.</span>
+                  </span>
+                </span>
+              </label>
               <input class="form-control" id="broker-timeout-ms" type="number" min="1000">
             </div>
             <div class="col-md-6">
@@ -439,8 +529,10 @@
               </label>
             </div>
           </div>
+          </div>
+          <div id="broker-status-output" class="scene-help">No broker check has been run yet.</div>
         </div>
-        <div id="broker-status-output" class="scene-help">No broker check has been run yet.</div>
+        <div id="cloud-mode-note" class="scene-inline-note">Local Only is the simplest starting point. Switch to Local + Cloud only if you already run your own broker service.</div>
       </div>
     </section>
   </section>
@@ -450,7 +542,8 @@
       <div class="card-header d-flex justify-content-between align-items-center">
         <div>
           <strong>Scenes</strong>
-          <div class="scene-help">Each saved scene becomes a HomeKit switch accessory.</div>
+          <div class="scene-help">Each saved scene becomes a HomeKit switch plus a companion volume speaker.</div>
+          <div class="scene-inline-note mt-2">Save scene changes in the editor, then use Homebridge&apos;s footer Save button when you&apos;re ready to write everything to `config.json`.</div>
         </div>
         <button class="btn btn-sm btn-outline-primary" id="new-scene-button" type="button">New Scene</button>
       </div>
@@ -464,68 +557,173 @@
         <div>
           <strong>Scene Editor</strong>
           <div class="scene-help">Stable Sonos IDs are stored under the hood; the UI keeps room selection friendly.</div>
+          <div class="scene-inline-note mt-2">Save Scene Changes updates this scene in the list above. Homebridge&apos;s footer Save button writes the full plugin config to disk.</div>
         </div>
         <div class="d-flex gap-2">
           <button class="btn btn-sm btn-outline-danger" id="delete-scene-button" type="button">Delete</button>
-          <button class="btn btn-sm btn-primary" id="save-scene-button" type="button">Save Scene</button>
+          <button class="btn btn-sm btn-primary" id="save-scene-button" type="button">Save Scene Changes</button>
         </div>
       </div>
       <div class="card-body">
         <div class="row g-3">
           <div class="col-12">
-            <label class="form-label" for="scene-name">Scene Name</label>
+            <label class="form-label" for="scene-name">
+              <span class="scene-label-row">
+                <span>Scene Name</span>
+                <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Scene Name">
+                  ?
+                  <span class="scene-tooltip">The friendly name shown for this scene in HomeKit. The companion volume speaker uses the same name with "Volume" appended.</span>
+                </span>
+              </span>
+            </label>
             <input class="form-control" id="scene-name" type="text">
           </div>
           <input id="scene-id" type="hidden">
           <div class="col-md-6">
-            <label class="form-label" for="household-select">Household</label>
+            <label class="form-label" for="household-select">
+              <span class="scene-label-row">
+                <span>Household</span>
+                <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Household">
+                  ?
+                  <span class="scene-tooltip">The Sonos household this scene controls. Most setups only have one. Pick the household that contains the rooms you want to group.</span>
+                </span>
+              </span>
+            </label>
             <select class="form-select" id="household-select"></select>
           </div>
           <div class="col-md-6">
-            <label class="form-label" for="coordinator-select">Coordinator Room</label>
+            <label class="form-label" for="coordinator-select">
+              <span class="scene-label-row">
+                <span>Coordinator Room</span>
+                <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Coordinator Room">
+                  ?
+                  <span class="scene-tooltip">The main room that anchors the group and receives the source change first. Choose the room that should lead the scene.</span>
+                </span>
+              </span>
+            </label>
             <select class="form-select" id="coordinator-select"></select>
           </div>
           <div class="col-12">
-            <label class="form-label">Group Members</label>
+            <label class="form-label">
+              <span class="scene-label-row">
+                <span>Group Members</span>
+                <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Group Members">
+                  ?
+                  <span class="scene-tooltip">Additional rooms to join the coordinator when the scene runs. Leave all unchecked for a single-room scene.</span>
+                </span>
+              </span>
+            </label>
             <div id="member-list" class="scene-member-grid"></div>
           </div>
           <div class="col-md-4">
-            <label class="form-label" for="source-kind">Source Kind</label>
+            <label class="form-label" for="source-kind">
+              <span class="scene-label-row">
+                <span>Source Kind</span>
+                <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Source Kind">
+                  ?
+                  <span class="scene-tooltip">The type of thing this scene should load. The list changes based on what the coordinator room supports, such as favorites, line-in, or TV.</span>
+                </span>
+              </span>
+            </label>
             <select class="form-select" id="source-kind"></select>
           </div>
           <div class="col-md-8">
-            <label class="form-label" for="source-target">Source Target</label>
+            <label class="form-label" for="source-target">
+              <span class="scene-label-row">
+                <span>Source Target</span>
+                <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Source Target">
+                  ?
+                  <span class="scene-tooltip">The specific favorite or input to load when the scene starts. This list depends on the source kind you selected.</span>
+                </span>
+              </span>
+            </label>
             <select class="form-select" id="source-target"></select>
           </div>
           <div class="col-md-3">
-            <label class="form-label" for="coordinator-volume">Coordinator Volume</label>
+            <label class="form-label" for="coordinator-volume">
+              <span class="scene-label-row">
+                <span>Coordinator Volume</span>
+                <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Coordinator Volume">
+                  ?
+                  <span class="scene-tooltip">Optional starting volume for the coordinator room. Leave this blank to keep whatever volume the room already has.</span>
+                </span>
+              </span>
+            </label>
             <input class="form-control" id="coordinator-volume" type="number" min="0" max="100">
           </div>
           <div class="col-md-3">
-            <label class="form-label" for="settle-ms">Settle Delay (ms)</label>
+            <label class="form-label" for="settle-ms">
+              <span class="scene-label-row">
+                <span>Settle Delay (ms)</span>
+                <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Settle Delay">
+                  ?
+                  <span class="scene-tooltip">How long to wait after regrouping before loading the source and volumes. Increase this if Sonos needs more time to finish grouping.</span>
+                </span>
+              </span>
+            </label>
             <input class="form-control" id="settle-ms" type="number" min="0">
           </div>
           <div class="col-md-3">
-            <label class="form-label" for="retry-count">Retry Count</label>
+            <label class="form-label" for="retry-count">
+              <span class="scene-label-row">
+                <span>Retry Count</span>
+                <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Retry Count">
+                  ?
+                  <span class="scene-tooltip">How many extra attempts the plugin should make if Sonos returns a transient error while running the scene.</span>
+                </span>
+              </span>
+            </label>
             <input class="form-control" id="retry-count" type="number" min="0">
           </div>
           <div class="col-md-3">
-            <label class="form-label" for="retry-delay-ms">Retry Delay (ms)</label>
+            <label class="form-label" for="retry-delay-ms">
+              <span class="scene-label-row">
+                <span>Retry Delay (ms)</span>
+                <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Retry Delay">
+                  ?
+                  <span class="scene-tooltip">How long to pause between retry attempts. Increase this if retries are happening too quickly for your speakers.</span>
+                </span>
+              </span>
+            </label>
             <input class="form-control" id="retry-delay-ms" type="number" min="0">
           </div>
           <div class="col-md-4">
-            <label class="form-label" for="auto-reset-ms">Auto Reset (ms)</label>
+            <label class="form-label" for="auto-reset-ms">
+              <span class="scene-label-row">
+                <span>Auto Reset (ms)</span>
+                <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Auto Reset">
+                  ?
+                  <span class="scene-tooltip">How long the HomeKit scene switch should stay on before it flips itself back off. This does not stop playback by itself.</span>
+                </span>
+              </span>
+            </label>
             <input class="form-control" id="auto-reset-ms" type="number" min="0">
           </div>
           <div class="col-md-4">
-            <label class="form-label" for="off-behavior">Off Behavior</label>
+            <label class="form-label" for="off-behavior">
+              <span class="scene-label-row">
+                <span>Off Behavior</span>
+                <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Off Behavior">
+                  ?
+                  <span class="scene-tooltip">What should happen when you turn the HomeKit scene switch off. None leaves the rooms grouped as they are. Ungroup splits the member rooms back out.</span>
+                </span>
+              </span>
+            </label>
             <select class="form-select" id="off-behavior">
               <option value="none">None</option>
               <option value="ungroup">Ungroup</option>
             </select>
           </div>
           <div class="col-12">
-            <label class="form-label">Per-room Volumes</label>
+            <label class="form-label">
+              <span class="scene-label-row">
+                <span>Per-room Volumes</span>
+                <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Per-room Volumes">
+                  ?
+                  <span class="scene-tooltip">Optional volume overrides for specific member rooms. Leave a room blank here to keep its current volume or let the group volume behavior apply.</span>
+                </span>
+              </span>
+            </label>
             <div id="volume-list" class="scene-member-grid"></div>
           </div>
         </div>
@@ -591,12 +789,13 @@
       refreshButton: document.getElementById("refresh-button"),
       validateButton: document.getElementById("validate-button"),
       testButton: document.getElementById("test-button"),
-      saveHomebridgeButton: document.getElementById("save-homebridge-button"),
       cloudModeInputs: Array.from(document.querySelectorAll("input[name='cloud-mode']")),
       cloudModeChoices: Array.from(document.querySelectorAll("[data-mode-choice]")),
       cloudModePill: document.getElementById("cloud-mode-pill"),
+      cloudBrokerPanel: document.getElementById("cloud-broker-panel"),
       cloudBrokerCopy: document.getElementById("cloud-broker-copy"),
       cloudBrokerFields: document.getElementById("cloud-broker-fields"),
+      cloudModeNote: document.getElementById("cloud-mode-note"),
       brokerUrl: document.getElementById("broker-url"),
       brokerApiKey: document.getElementById("broker-api-key"),
       brokerTimeoutMs: document.getElementById("broker-timeout-ms"),
@@ -824,10 +1023,13 @@
       const isHybrid = cloud.mode === "local_plus_cloud";
       elements.cloudModePill.textContent = isHybrid ? "Local + Cloud" : "Local Only";
       elements.cloudModePill.className = `scene-status-pill ${isHybrid ? "pending" : "local"}`;
-      elements.cloudBrokerFields.classList.toggle("scene-cloud-hidden", !isHybrid);
+      elements.cloudBrokerPanel.classList.toggle("scene-cloud-hidden", !isHybrid);
       elements.cloudBrokerCopy.textContent = isHybrid
-        ? "Enter the URL for your self-hosted broker and optionally an API key. The plugin can then check that broker before cloud-backed scene support is wired in."
-        : "Local Only is active. Broker settings are preserved, but they are not used until you switch modes.";
+        ? "Only needed if you run your own broker. The settings below stay with this plugin config and are ignored whenever Local Only is active."
+        : "Only needed if you choose Local + Cloud and run your own broker service.";
+      elements.cloudModeNote.textContent = isHybrid
+        ? "Cloud-backed sources will stay opt-in. This plugin will keep local discovery, grouping, and line-in control on your Homebridge box."
+        : "Local Only is the simplest starting point. Switch to Local + Cloud only if you already run your own broker service.";
 
       elements.brokerUrl.value = cloud.broker?.url || "";
       elements.brokerApiKey.value = cloud.broker?.apiKey || "";
@@ -843,7 +1045,7 @@
       const status = state.brokerStatus;
 
       if (cloud.mode !== "local_plus_cloud") {
-        elements.brokerStatusOutput.innerHTML = `<span class="scene-help">Broker checks are optional while Local Only is active.</span>`;
+        elements.brokerStatusOutput.innerHTML = `<span class="scene-help">Broker checks will appear here after you switch to Local + Cloud.</span>`;
         return;
       }
 
@@ -1135,8 +1337,14 @@
     async function persistConfig(showToast) {
       await homebridge.updatePluginConfig([clone(state.config)]);
       if (showToast) {
-        homebridge.toast.success("Scene configuration updated in Homebridge memory.");
+        homebridge.toast.success("Scene changes saved here. Use Homebridge's Save button below to write them to config.json.");
       }
+    }
+
+    function stageConfigUpdate() {
+      void persistConfig(false).catch((error) => {
+        homebridge.toast.error(error.message || "Unable to stage the latest config changes.");
+      });
     }
 
     async function discover() {
@@ -1223,13 +1431,6 @@
       render();
     }
 
-    async function saveToHomebridge() {
-      serializeCloudConfig();
-      await persistConfig(false);
-      await homebridge.savePluginConfig();
-      homebridge.toast.success("Configuration saved to config.json.");
-    }
-
     async function checkBroker() {
       serializeCloudConfig();
       if (!state.config.cloud.broker.url) {
@@ -1263,7 +1464,6 @@
       elements.saveSceneButton.addEventListener("click", saveScene);
       elements.deleteSceneButton.addEventListener("click", deleteScene);
       elements.newSceneButton.addEventListener("click", newScene);
-      elements.saveHomebridgeButton.addEventListener("click", saveToHomebridge);
       elements.checkBrokerButton.addEventListener("click", checkBroker);
 
       elements.cloudModeInputs.forEach((input) => {
@@ -1271,6 +1471,7 @@
           serializeCloudConfig();
           state.brokerStatus = null;
           render();
+          stageConfigUpdate();
         });
       });
 
@@ -1285,6 +1486,7 @@
           serializeCloudConfig();
           state.brokerStatus = null;
           renderBrokerStatus();
+          stageConfigUpdate();
         });
       });
 
