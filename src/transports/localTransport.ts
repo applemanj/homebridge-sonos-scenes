@@ -97,6 +97,19 @@ export function buildFavoriteTransportUri(favorite: Pick<SonosFavorite, "uri" | 
   return buildFavoriteContainerUri(favorite.metadata);
 }
 
+function favoriteUnsupportedReason(favorite: Pick<SonosFavorite, "uri" | "playbackType" | "description">): string | undefined {
+  if (favorite.uri?.trim()) {
+    return undefined;
+  }
+
+  if (favorite.playbackType?.toLowerCase() === "shortcut") {
+    const description = favorite.description?.toLowerCase() || "shortcut";
+    return `Favorite "${description}" shortcuts are not playable through the local transport. Pick a station, playlist, track, or line-in favorite instead.`;
+  }
+
+  return "This favorite does not expose a direct local playback URI for the local transport.";
+}
+
 function normalizeFavorite(favorite: SonosFavorite): SonosFavorite {
   const normalized: SonosFavorite = {
     ...favorite,
@@ -115,6 +128,14 @@ function normalizeFavorite(favorite: SonosFavorite): SonosFavorite {
   const transportUri = favorite.transportUri?.trim() || buildFavoriteTransportUri(normalized);
   if (transportUri) {
     normalized.transportUri = transportUri;
+  }
+
+  const unsupportedReason = favorite.unsupportedReason?.trim() || favoriteUnsupportedReason(normalized);
+  if (unsupportedReason) {
+    normalized.unsupportedReason = unsupportedReason;
+    normalized.playable = false;
+  } else {
+    normalized.playable = true;
   }
 
   return normalized;
@@ -394,6 +415,9 @@ export class LocalSonosTransport implements SonosTransport {
 
     const coordinator = this.requireLiveRecord(coordinatorPlayerId);
     const favorite = await this.findFavorite(householdId, favoriteId);
+    if (favorite.playable === false) {
+      throw new Error(favorite.unsupportedReason ?? `Favorite "${favorite.name}" is not playable through the local transport.`);
+    }
     const transportUri = favorite.transportUri ?? buildFavoriteTransportUri(favorite);
     if (!transportUri) {
       throw new Error(`Favorite "${favorite.name}" does not expose enough metadata to build a playable local URI.`);

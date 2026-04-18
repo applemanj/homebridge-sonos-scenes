@@ -230,6 +230,14 @@ function validateSource(
     const favorite = household.favorites.find((item) => item.id === source.favoriteId);
     if (!favorite) {
       result.errors.push(`Favorite "${source.favoriteId}" was not found in household "${household.displayName}".`);
+      return;
+    }
+
+    if (favorite.playable === false) {
+      result.errors.push(
+        favorite.unsupportedReason
+        ?? `Favorite "${favorite.name}" is not playable through the active local transport.`,
+      );
     }
     return;
   }

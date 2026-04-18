@@ -82,3 +82,41 @@ test("validateSceneDefinition rejects unsupported tv source", () => {
   assert.equal(validation.valid, false);
   assert.match(validation.errors.join(" "), /does not support source kind "tv"/i);
 });
+
+test("validateSceneDefinition rejects favorites the local transport cannot play", () => {
+  const snapshot = JSON.parse(JSON.stringify(sampleTopology));
+  snapshot.households[0].favorites.push({
+    id: "favorite-artist-shortcut",
+    name: "The Hipster Orchestra",
+    playbackType: "shortcut",
+    playable: false,
+    unsupportedReason: "Favorite artist shortcuts are not playable through the local transport.",
+  });
+
+  const validation = validateSceneDefinition(
+    {
+      id: "scene-favorite-shortcut",
+      name: "Invalid Favorite",
+      householdId: "local-household",
+      coordinatorPlayerId: "RINCON_UPPER_LEVEL",
+      memberPlayerIds: [],
+      source: {
+        kind: "favorite",
+        favoriteId: "favorite-artist-shortcut",
+      },
+      playerVolumes: [],
+      offBehavior: {
+        kind: "none",
+      },
+      settleMs: 750,
+      retryCount: 1,
+      retryDelayMs: 0,
+      autoResetMs: 0,
+    },
+    snapshot,
+    fakeTransport,
+  );
+
+  assert.equal(validation.valid, false);
+  assert.match(validation.errors.join(" "), /not playable through the local transport/i);
+});

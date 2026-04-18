@@ -91,6 +91,8 @@ export interface SonosFavorite {
   metadata?: string;
   description?: string;
   playbackType?: string;
+  playable?: boolean;
+  unsupportedReason?: string;
 }
 
 export interface SonosPlayer {

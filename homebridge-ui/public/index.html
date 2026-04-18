@@ -18,6 +18,15 @@
     background: var(--scene-bg);
   }
 
+  .scene-hero h2 {
+    color: #eaf2ff;
+    text-shadow: 0 1px 10px rgba(8, 15, 30, 0.28);
+  }
+
+  .scene-hero .scene-help {
+    color: rgba(232, 242, 255, 0.88);
+  }
+
   .scene-grid {
     display: grid;
     gap: 1rem;
@@ -60,6 +69,34 @@
     font-size: 0.8rem;
     background: rgba(10, 132, 255, 0.08);
     color: var(--scene-accent);
+  }
+
+  .scene-action-guide {
+    display: grid;
+    gap: 0.65rem;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    margin-top: 1rem;
+  }
+
+  .scene-action-guide div {
+    border: 1px solid rgba(170, 198, 255, 0.16);
+    border-radius: 0.85rem;
+    padding: 0.7rem 0.8rem;
+    background: rgba(12, 24, 46, 0.18);
+  }
+
+  .scene-action-guide strong {
+    display: block;
+    color: #f3f7ff;
+    margin-bottom: 0.2rem;
+    font-size: 0.95rem;
+  }
+
+  .scene-action-guide span {
+    display: block;
+    color: rgba(232, 242, 255, 0.84);
+    font-size: 0.87rem;
+    line-height: 1.4;
   }
 
   .scene-member-grid {
@@ -152,10 +189,28 @@
         </p>
       </div>
       <div class="d-flex flex-wrap gap-2">
-        <button class="btn btn-outline-secondary" id="refresh-button" type="button">Discover</button>
-        <button class="btn btn-outline-primary" id="validate-button" type="button">Validate</button>
-        <button class="btn btn-primary" id="test-button" type="button">Run Test</button>
-        <button class="btn btn-success" id="save-homebridge-button" type="button">Save To Homebridge</button>
+        <button class="btn btn-outline-secondary" id="refresh-button" type="button" title="Refresh households, rooms, groups, and favorites from Sonos.">Discover</button>
+        <button class="btn btn-outline-primary" id="validate-button" type="button" title="Check the scene against the current Sonos topology without changing playback.">Validate</button>
+        <button class="btn btn-primary" id="test-button" type="button" title="Actually run the scene on Sonos right now so you can confirm it works.">Run Test</button>
+        <button class="btn btn-success" id="save-homebridge-button" type="button" title="Write the current scene configuration into Homebridge.">Save To Homebridge</button>
+      </div>
+    </div>
+    <div class="scene-action-guide">
+      <div>
+        <strong>Discover</strong>
+        <span>Refresh the live list of Sonos households, rooms, groups, favorites, and inputs.</span>
+      </div>
+      <div>
+        <strong>Validate</strong>
+        <span>Checks your scene setup for errors against the current Sonos topology without changing anything on your speakers.</span>
+      </div>
+      <div>
+        <strong>Run Test</strong>
+        <span>Actually runs the scene on your Sonos system now so you can confirm the grouping, source, and volume behavior.</span>
+      </div>
+      <div>
+        <strong>Save To Homebridge</strong>
+        <span>Saves the current scenes into Homebridge so they persist and appear as HomeKit switch accessories.</span>
       </div>
     </div>
   </section>
@@ -187,14 +242,11 @@
       </div>
       <div class="card-body">
         <div class="row g-3">
-          <div class="col-md-6">
+          <div class="col-12">
             <label class="form-label" for="scene-name">Scene Name</label>
             <input class="form-control" id="scene-name" type="text">
           </div>
-          <div class="col-md-6">
-            <label class="form-label" for="scene-id">Scene ID</label>
-            <input class="form-control" id="scene-id" type="text" readonly>
-          </div>
+          <input id="scene-id" type="hidden">
           <div class="col-md-6">
             <label class="form-label" for="household-select">Household</label>
             <select class="form-select" id="household-select"></select>
@@ -394,6 +446,10 @@
       return household?.displayName || householdId;
     }
 
+    function getPlayableFavorites(household) {
+      return (household?.favorites || []).filter((favorite) => favorite.playable !== false);
+    }
+
     function serializeDraft() {
       const draft = clone(state.draft);
       draft.name = elements.sceneName.value.trim() || "New Scene";
@@ -531,18 +587,26 @@
         .join("");
 
       if (sourceKind === "favorite") {
-        const favorites = household?.favorites || [];
+        const favorites = getPlayableFavorites(household);
+        const hasCurrentFavorite = Boolean(state.draft.source.favoriteId);
         const selectedFavorite = favorites.some((favorite) => favorite.id === state.draft.source.favoriteId)
           ? state.draft.source.favoriteId
-          : favorites[0]?.id || "";
+          : hasCurrentFavorite ? "" : favorites[0]?.id || "";
         state.draft.source = {
           kind: "favorite",
           favoriteId: selectedFavorite,
           favoriteName: favorites.find((favorite) => favorite.id === selectedFavorite)?.name || "",
         };
+        if (favorites.length === 0) {
+          elements.sourceTarget.innerHTML = `<option value="">No playable favorites available for local scenes</option>`;
+          return;
+        }
         elements.sourceTarget.innerHTML = favorites
-          .map((favorite) => {
+          .map((favorite, index) => {
             const label = favorite.description ? `${favorite.name} (${favorite.description})` : favorite.name;
+            if (index === 0 && !selectedFavorite) {
+              return `<option value="">Select a favorite</option><option value="${favorite.id}" ${favorite.id === selectedFavorite ? "selected" : ""}>${label}</option>`;
+            }
             return `<option value="${favorite.id}" ${favorite.id === selectedFavorite ? "selected" : ""}>${label}</option>`;
           })
           .join("");
@@ -666,7 +730,11 @@
             })
             .join("");
           const favoriteRows = (household.favorites || [])
-            .map((favorite) => `<li>${favorite.name}${favorite.description ? ` <span class="scene-help">(${favorite.description})</span>` : ""}</li>`)
+            .map((favorite) => {
+              const detail = favorite.description ? `(${favorite.description})` : "";
+              const support = favorite.playable === false ? " - not playable in local scenes" : "";
+              return `<li>${favorite.name}${detail ? ` <span class="scene-help">${detail}</span>` : ""}${support ? ` <span class="scene-help">${support}</span>` : ""}</li>`;
+            })
             .join("");
 
           return `
@@ -853,7 +921,7 @@
     }
 
     async function init() {
-      homebridge.showSchemaForm();
+      homebridge.hideSchemaForm();
       bindEvents();
 
       const pluginConfig = await homebridge.getPluginConfig();

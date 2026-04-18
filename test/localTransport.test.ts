@@ -45,6 +45,8 @@ test("buildFavoriteTransportUri derives container URIs for shortcut favorites", 
   assert.equal(shortcutFavorite.description, "Artist");
   assert.equal(shortcutFavorite.playbackType, "shortcut");
   assert.equal(shortcutFavorite.uri, undefined);
+  assert.equal(shortcutFavorite.playable, false);
+  assert.match(shortcutFavorite.unsupportedReason ?? "", /not playable through the local transport/i);
   assert.equal(
     buildFavoriteTransportUri(shortcutFavorite),
     "x-rincon-cpcontainer:10052064artist%3a1314005644",
