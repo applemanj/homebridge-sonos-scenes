@@ -6,6 +6,7 @@ export class SceneSpeakerAccessory {
   private service: Service;
   private scene: SceneDefinition;
   private lastKnownVolume: number;
+  private lastKnownActiveVolume: number;
   private lastKnownMuted = false;
 
   constructor(
@@ -14,27 +15,33 @@ export class SceneSpeakerAccessory {
     scene: SceneDefinition,
   ) {
     this.scene = scene;
-    this.lastKnownVolume = scene.coordinatorVolume ?? 0;
+    this.lastKnownVolume = scene.coordinatorVolume ?? 30;
+    this.lastKnownActiveVolume = this.lastKnownVolume > 0 ? this.lastKnownVolume : 30;
     this.accessory.context.sceneId = scene.id;
-    this.accessory.context.kind = "speaker";
+    this.accessory.context.kind = "volume";
     this.accessory.displayName = this.displayNameFor(scene);
-    this.accessory.category = this.platform.api.hap.Categories.SPEAKER;
+    this.accessory.category = this.platform.api.hap.Categories.LIGHTBULB;
+
+    const legacySpeakerService = this.accessory.getService(this.platform.Service.Speaker);
+    if (legacySpeakerService) {
+      this.accessory.removeService(legacySpeakerService);
+    }
 
     this.service =
-      this.accessory.getService(this.platform.Service.Speaker)
-      ?? this.accessory.addService(this.platform.Service.Speaker);
+      this.accessory.getService(this.platform.Service.Lightbulb)
+      ?? this.accessory.addService(this.platform.Service.Lightbulb);
 
-    if (!this.service.testCharacteristic(this.platform.Characteristic.Volume)) {
-      this.service.addCharacteristic(this.platform.Characteristic.Volume);
+    if (!this.service.testCharacteristic(this.platform.Characteristic.Brightness)) {
+      this.service.addCharacteristic(this.platform.Characteristic.Brightness);
     }
 
     this.service.setCharacteristic(this.platform.Characteristic.Name, this.displayNameFor(scene));
-    this.service.getCharacteristic(this.platform.Characteristic.Mute)
-      .onGet(this.handleMuteGet.bind(this))
-      .onSet(this.handleMuteSet.bind(this));
-    this.service.getCharacteristic(this.platform.Characteristic.Volume)
-      .onGet(this.handleVolumeGet.bind(this))
-      .onSet(this.handleVolumeSet.bind(this));
+    this.service.getCharacteristic(this.platform.Characteristic.On)
+      .onGet(this.handleOnGet.bind(this))
+      .onSet(this.handleOnSet.bind(this));
+    this.service.getCharacteristic(this.platform.Characteristic.Brightness)
+      .onGet(this.handleBrightnessGet.bind(this))
+      .onSet(this.handleBrightnessSet.bind(this));
 
     const accessoryInformation =
       this.accessory.getService(this.platform.Service.AccessoryInformation)
@@ -42,15 +49,21 @@ export class SceneSpeakerAccessory {
 
     accessoryInformation
       .setCharacteristic(this.platform.Characteristic.Manufacturer, "homebridge-sonos-scenes")
-      .setCharacteristic(this.platform.Characteristic.Model, "Sonos Scene Speaker")
-      .setCharacteristic(this.platform.Characteristic.SerialNumber, `${scene.id}:speaker`);
+      .setCharacteristic(this.platform.Characteristic.Model, "Sonos Scene Volume Dimmer")
+      .setCharacteristic(this.platform.Characteristic.SerialNumber, `${scene.id}:volume`);
   }
 
   updateScene(scene: SceneDefinition): void {
     this.scene = scene;
-    this.lastKnownVolume = scene.coordinatorVolume ?? this.lastKnownVolume;
+    const configuredVolume = scene.coordinatorVolume;
+    if (configuredVolume !== undefined) {
+      this.lastKnownVolume = configuredVolume;
+      if (configuredVolume > 0) {
+        this.lastKnownActiveVolume = configuredVolume;
+      }
+    }
     this.accessory.context.sceneId = scene.id;
-    this.accessory.context.kind = "speaker";
+    this.accessory.context.kind = "volume";
     this.accessory.displayName = this.displayNameFor(scene);
     this.service.setCharacteristic(this.platform.Characteristic.Name, this.displayNameFor(scene));
   }
@@ -59,9 +72,12 @@ export class SceneSpeakerAccessory {
     return `${scene.name} Volume`;
   }
 
-  private async handleVolumeGet(): Promise<CharacteristicValue> {
+  private async handleBrightnessGet(): Promise<CharacteristicValue> {
     try {
       this.lastKnownVolume = await this.platform.getSceneVolume(this.scene.id);
+      if (this.lastKnownVolume > 0) {
+        this.lastKnownActiveVolume = this.lastKnownVolume;
+      }
     } catch {
       void 0;
     }
@@ -69,27 +85,61 @@ export class SceneSpeakerAccessory {
     return this.lastKnownVolume;
   }
 
-  private async handleVolumeSet(value: CharacteristicValue): Promise<void> {
+  private async handleBrightnessSet(value: CharacteristicValue): Promise<void> {
     const nextVolume = Math.max(0, Math.min(100, Math.round(Number(value))));
     await this.platform.setSceneVolume(this.scene.id, nextVolume);
     this.lastKnownVolume = nextVolume;
-    this.service.updateCharacteristic(this.platform.Characteristic.Volume, nextVolume);
+    this.service.updateCharacteristic(this.platform.Characteristic.Brightness, nextVolume);
+
+    if (nextVolume > 0) {
+      this.lastKnownActiveVolume = nextVolume;
+      if (this.lastKnownMuted) {
+        await this.platform.setSceneMuted(this.scene.id, false);
+        this.lastKnownMuted = false;
+      }
+      this.service.updateCharacteristic(this.platform.Characteristic.On, true);
+      return;
+    }
+
+    await this.platform.setSceneMuted(this.scene.id, true);
+    this.lastKnownMuted = true;
+    this.service.updateCharacteristic(this.platform.Characteristic.On, false);
   }
 
-  private async handleMuteGet(): Promise<CharacteristicValue> {
+  private async handleOnGet(): Promise<CharacteristicValue> {
     try {
       this.lastKnownMuted = await this.platform.getSceneMuted(this.scene.id);
+      this.lastKnownVolume = await this.platform.getSceneVolume(this.scene.id);
+      if (this.lastKnownVolume > 0) {
+        this.lastKnownActiveVolume = this.lastKnownVolume;
+      }
     } catch {
       void 0;
     }
 
-    return this.lastKnownMuted;
+    return !this.lastKnownMuted && this.lastKnownVolume > 0;
   }
 
-  private async handleMuteSet(value: CharacteristicValue): Promise<void> {
-    const nextMuted = value === true;
-    await this.platform.setSceneMuted(this.scene.id, nextMuted);
-    this.lastKnownMuted = nextMuted;
-    this.service.updateCharacteristic(this.platform.Characteristic.Mute, nextMuted);
+  private async handleOnSet(value: CharacteristicValue): Promise<void> {
+    const nextOn = value === true;
+    if (nextOn) {
+      const restoredVolume = this.lastKnownVolume > 0 ? this.lastKnownVolume : this.lastKnownActiveVolume;
+      if (this.lastKnownVolume <= 0 && restoredVolume > 0) {
+        await this.platform.setSceneVolume(this.scene.id, restoredVolume);
+        this.lastKnownVolume = restoredVolume;
+        this.service.updateCharacteristic(this.platform.Characteristic.Brightness, restoredVolume);
+      }
+      await this.platform.setSceneMuted(this.scene.id, false);
+      this.lastKnownMuted = false;
+      this.service.updateCharacteristic(this.platform.Characteristic.On, true);
+      return;
+    }
+
+    if (this.lastKnownVolume > 0) {
+      this.lastKnownActiveVolume = this.lastKnownVolume;
+    }
+    await this.platform.setSceneMuted(this.scene.id, true);
+    this.lastKnownMuted = true;
+    this.service.updateCharacteristic(this.platform.Characteristic.On, false);
   }
 }

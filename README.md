@@ -20,7 +20,7 @@ The goal is not general Sonos control. The goal is a clean way to trigger multi-
 
 ## What Is Implemented
 
-- A singular Homebridge dynamic platform plugin with switch accessories for each configured scene.
+- A singular Homebridge dynamic platform plugin with switch accessories for each configured scene plus companion volume controls for quick level adjustments in Apple Home.
 - A normalized scene model that stores stable Sonos IDs instead of room-name strings.
 - A local-first `SonosTransport` abstraction with live discovery through the `sonos` package and fixture fallback for UI/testing.
 - A `SceneRunner` that validates scenes, serializes execution per coordinator, retries transient failures, and emits structured logs.

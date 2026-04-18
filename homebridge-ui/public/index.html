@@ -619,7 +619,7 @@
       <div class="card-header scene-section-header">
         <div class="scene-section-header-copy">
           <strong>Scenes</strong>
-          <div class="scene-help">Each saved scene becomes a HomeKit switch plus a companion volume speaker.</div>
+          <div class="scene-help">Each saved scene becomes a HomeKit switch plus a companion volume control.</div>
           <div class="scene-inline-note mt-2">Save scene changes in the editor, then use Homebridge&apos;s footer Save button when you&apos;re ready to write everything to `config.json`.</div>
         </div>
         <div class="scene-section-actions">
@@ -651,7 +651,7 @@
                 <span>Scene Name</span>
                 <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Scene Name">
                   ?
-                  <span class="scene-tooltip">The friendly name shown for this scene in HomeKit. The companion volume speaker uses the same name with "Volume" appended.</span>
+                  <span class="scene-tooltip">The friendly name shown for this scene in HomeKit. The companion volume control uses the same name with "Volume" appended.</span>
                 </span>
               </span>
             </label>
@@ -706,19 +706,7 @@
             </label>
             <select class="form-select" id="source-target"></select>
           </div>
-          <div class="col-md-3">
-            <label class="form-label" for="coordinator-volume">
-              <span class="scene-label-row">
-                <span>Lead Room Volume</span>
-                <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Coordinator Volume">
-                  ?
-                  <span class="scene-tooltip">Optional starting volume for the scene's lead room. Leave this blank to keep whatever volume that room already has.</span>
-                </span>
-              </span>
-            </label>
-            <input class="form-control" id="coordinator-volume" type="number" min="0" max="100">
-          </div>
-          <div class="col-md-3">
+          <div class="col-md-4">
             <label class="form-label" for="settle-ms">
               <span class="scene-label-row">
                 <span>Settle Delay (ms)</span>
@@ -730,7 +718,7 @@
             </label>
             <input class="form-control" id="settle-ms" type="number" min="0">
           </div>
-          <div class="col-md-3">
+          <div class="col-md-4">
             <label class="form-label" for="retry-count">
               <span class="scene-label-row">
                 <span>Retry Count</span>
@@ -742,7 +730,7 @@
             </label>
             <input class="form-control" id="retry-count" type="number" min="0">
           </div>
-          <div class="col-md-3">
+          <div class="col-md-4">
             <label class="form-label" for="retry-delay-ms">
               <span class="scene-label-row">
                 <span>Retry Delay (ms)</span>
@@ -754,7 +742,7 @@
             </label>
             <input class="form-control" id="retry-delay-ms" type="number" min="0">
           </div>
-          <div class="col-md-4">
+          <div class="col-md-6">
             <label class="form-label" for="auto-reset-ms">
               <span class="scene-label-row">
                 <span>Auto Reset (ms)</span>
@@ -766,7 +754,7 @@
             </label>
             <input class="form-control" id="auto-reset-ms" type="number" min="0">
           </div>
-          <div class="col-md-4">
+          <div class="col-md-6">
             <label class="form-label" for="off-behavior">
               <span class="scene-label-row">
                 <span>Off Behavior</span>
@@ -829,7 +817,6 @@
       memberList: document.getElementById("member-list"),
       sourceKind: document.getElementById("source-kind"),
       sourceTarget: document.getElementById("source-target"),
-      coordinatorVolume: document.getElementById("coordinator-volume"),
       settleMs: document.getElementById("settle-ms"),
       retryCount: document.getElementById("retry-count"),
       retryDelayMs: document.getElementById("retry-delay-ms"),
@@ -1009,7 +996,8 @@
         selectedRoomIds.unshift(draft.source.deviceId);
       }
       draft.memberPlayerIds = selectedRoomIds.filter((playerId) => playerId !== draft.coordinatorPlayerId);
-      draft.coordinatorVolume = elements.coordinatorVolume.value === "" ? undefined : Number(elements.coordinatorVolume.value);
+      const leadVolumeInput = elements.memberList.querySelector("input[data-coordinator-volume]");
+      draft.coordinatorVolume = leadVolumeInput && leadVolumeInput.value !== "" ? Number(leadVolumeInput.value) : undefined;
       draft.settleMs = Number(elements.settleMs.value || 0);
       draft.retryCount = Number(elements.retryCount.value || 0);
       draft.retryDelayMs = Number(elements.retryDelayMs.value || 0);
@@ -1204,6 +1192,20 @@
                       ${flags ? `<span class="scene-member-flags">${flags}</span>` : ""}
                     </span>
                   </label>
+                  ${isSelected && coordinatorId === player.id ? `
+                    <div class="scene-member-volume">
+                      <label class="scene-member-volume-label" for="lead-volume-${player.id}">Lead Room Volume</label>
+                      <input
+                        class="form-control form-control-sm scene-member-volume-input"
+                        id="lead-volume-${player.id}"
+                        data-coordinator-volume="true"
+                        type="number"
+                        min="0"
+                        max="100"
+                        placeholder="Keep current"
+                        value="${state.draft.coordinatorVolume ?? ""}">
+                    </div>
+                  ` : ""}
                   ${isSelected && coordinatorId !== player.id ? `
                     <div class="scene-member-volume">
                       <label class="scene-member-volume-label" for="member-volume-${player.id}">Volume Override</label>
@@ -1397,7 +1399,6 @@
       renderHouseholdOptions();
       renderSourceControls();
       renderMemberOptions();
-      elements.coordinatorVolume.value = state.draft.coordinatorVolume === "" ? "" : state.draft.coordinatorVolume ?? "";
       elements.settleMs.value = state.draft.settleMs ?? 750;
       elements.retryCount.value = state.draft.retryCount ?? 3;
       elements.retryDelayMs.value = state.draft.retryDelayMs ?? 750;
