@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
+  CloudBrokerConfig,
+  SonosCloudConfig,
   HouseholdSnapshot,
   LocalTransportConfig,
   SceneDefinition,
@@ -21,12 +23,27 @@ const DEFAULT_TRANSPORT: LocalTransportConfig = {
   allowTvSource: false,
 };
 
+const DEFAULT_CLOUD_BROKER: CloudBrokerConfig = {
+  timeoutMs: 8000,
+  routeFavorites: true,
+  routePlaylists: true,
+};
+
+const DEFAULT_CLOUD: SonosCloudConfig = {
+  mode: "local_only",
+  broker: { ...DEFAULT_CLOUD_BROKER },
+};
+
 export function createDefaultPlatformConfig(): ScenesPlatformConfig {
   return {
     platform: PLATFORM_NAME,
     name: "Sonos Scenes",
     logLevel: "info",
     transport: { ...DEFAULT_TRANSPORT },
+    cloud: {
+      mode: DEFAULT_CLOUD.mode,
+      broker: { ...DEFAULT_CLOUD.broker },
+    },
     scenes: [],
   };
 }
@@ -166,6 +183,24 @@ export function normalizePlatformConfig(config: Partial<ScenesPlatformConfig> | 
     ...(config?.transport ?? {}),
     kind: "local" as const,
   };
+  const cloud: SonosCloudConfig = {
+    mode: config?.cloud?.mode === "local_plus_cloud" ? "local_plus_cloud" : "local_only",
+    broker: {
+      ...DEFAULT_CLOUD_BROKER,
+      ...(config?.cloud?.broker ?? {}),
+      url: typeof config?.cloud?.broker?.url === "string" ? config.cloud.broker.url.trim() : undefined,
+      apiKey: typeof config?.cloud?.broker?.apiKey === "string" ? config.cloud.broker.apiKey.trim() : undefined,
+      timeoutMs: Math.max(1000, asNumber(config?.cloud?.broker?.timeoutMs, DEFAULT_CLOUD_BROKER.timeoutMs)),
+      routeFavorites:
+        typeof config?.cloud?.broker?.routeFavorites === "boolean"
+          ? config.cloud.broker.routeFavorites
+          : DEFAULT_CLOUD_BROKER.routeFavorites,
+      routePlaylists:
+        typeof config?.cloud?.broker?.routePlaylists === "boolean"
+          ? config.cloud.broker.routePlaylists
+          : DEFAULT_CLOUD_BROKER.routePlaylists,
+    },
+  };
 
   return {
     ...defaults,
@@ -181,6 +216,7 @@ export function normalizePlatformConfig(config: Partial<ScenesPlatformConfig> | 
         : defaults.logLevel,
     defaultHouseholdId: typeof config?.defaultHouseholdId === "string" ? config.defaultHouseholdId : undefined,
     transport,
+    cloud,
     scenes: Array.isArray(config?.scenes) ? config.scenes.map((scene) => normalizeScene(scene)) : [],
   };
 }
@@ -236,7 +272,7 @@ function validateSource(
     if (favorite.playable === false) {
       result.errors.push(
         favorite.unsupportedReason
-        ?? `Favorite "${favorite.name}" is not playable through the active local transport.`,
+        ?? `Favorite "${favorite.name}" is not playable through the active local transport. Use Local Only scenes for line-in and directly playable favorites, or add a Sonos cloud broker in a future Local + Cloud setup.`,
       );
     }
     return;

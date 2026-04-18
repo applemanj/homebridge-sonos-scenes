@@ -6,6 +6,7 @@ export const PLATFORM_NAME = "SonosScenes";
 export type LogLevel = "debug" | "info" | "warn" | "error";
 export type SceneSourceKind = "favorite" | "line_in" | "tv";
 export type SceneTrigger = "on" | "off" | "test";
+export type CloudControlMode = "local_only" | "local_plus_cloud";
 
 export interface FavoriteSource {
   kind: "favorite";
@@ -69,12 +70,26 @@ export interface LocalTransportConfig {
   allowTvSource: boolean;
 }
 
+export interface CloudBrokerConfig {
+  url?: string;
+  apiKey?: string;
+  timeoutMs: number;
+  routeFavorites: boolean;
+  routePlaylists: boolean;
+}
+
+export interface SonosCloudConfig {
+  mode: CloudControlMode;
+  broker: CloudBrokerConfig;
+}
+
 export interface ScenesPlatformConfig extends PlatformConfig {
   platform: typeof PLATFORM_NAME;
   name: string;
   logLevel: LogLevel;
   defaultHouseholdId?: string;
   transport: LocalTransportConfig;
+  cloud: SonosCloudConfig;
   scenes: SceneDefinition[];
 }
 

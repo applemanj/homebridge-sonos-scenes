@@ -12,6 +12,16 @@
         "requestTimeoutMs": 5000,
         "allowTvSource": false
       },
+      "cloud": {
+        "mode": "local_only",
+        "broker": {
+          "url": "",
+          "apiKey": "",
+          "timeoutMs": 8000,
+          "routeFavorites": true,
+          "routePlaylists": true
+        }
+      },
       "scenes": [
         {
           "id": "upper-level-line-in",

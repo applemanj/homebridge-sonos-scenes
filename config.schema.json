@@ -73,6 +73,50 @@
           }
         }
       },
+      "cloud": {
+        "title": "Cloud",
+        "type": "object",
+        "properties": {
+          "mode": {
+            "title": "Control Mode",
+            "type": "string",
+            "default": "local_only",
+            "oneOf": [
+              "local_only",
+              "local_plus_cloud"
+            ]
+          },
+          "broker": {
+            "title": "Broker",
+            "type": "object",
+            "properties": {
+              "url": {
+                "title": "Broker URL",
+                "type": "string"
+              },
+              "apiKey": {
+                "title": "Broker API Key",
+                "type": "string"
+              },
+              "timeoutMs": {
+                "title": "Broker Timeout (ms)",
+                "type": "integer",
+                "default": 8000
+              },
+              "routeFavorites": {
+                "title": "Route Favorites Through Broker",
+                "type": "boolean",
+                "default": true
+              },
+              "routePlaylists": {
+                "title": "Route Playlists Through Broker",
+                "type": "boolean",
+                "default": true
+              }
+            }
+          }
+        }
+      },
       "scenes": {
         "title": "Scenes",
         "type": "array",

@@ -39,6 +39,8 @@ homebridge-ui/
 examples/
   config.example.json
   sample-topology.json
+docs/
+  cloud-broker.md
 test/
 ```
 
@@ -84,6 +86,17 @@ The Homebridge project’s verified-plugin guidance also expects the plugin to b
 - `tv` source loading is disabled by default and remains transport-gated.
 - Favorites rely on URIs exposed through the local transport; some complex favorite types may need more transport-specific handling later.
 
+## Local Only Vs Local + Cloud
+
+The intended product shape is now:
+
+- `local_only`: today’s supported mode. It keeps discovery, grouping, line-in, TV, and directly playable favorites on the local Sonos path.
+- `local_plus_cloud`: a future mode for users who choose to run their own Sonos cloud broker for favorites and playlists that are not reliable over the local path.
+
+This project does not host that broker for users. The goal is an optional self-hosted companion service, not a shared multi-tenant cloud run by the plugin maintainer.
+
+The config model already reserves a `cloud` section so advanced users and future versions do not need a breaking config redesign later. The broker contract is documented in [docs/cloud-broker.md](docs/cloud-broker.md).
+
 ## Official Sonos References
 
 These docs informed the product boundaries and future cloud-adapter shape:
@@ -99,5 +112,6 @@ These docs informed the product boundaries and future cloud-adapter shape:
 ## Current Gaps
 
 - The local transport is MVP-level and best-effort for advanced favorites and TV input handling.
+- The `local_plus_cloud` mode is a planned architecture boundary only; the self-hosted broker contract is documented, but broker-backed playback is not wired into the runtime yet.
 - Subscription-driven refresh is still represented by the transport abstraction, but not yet fully wired for live event propagation.
 - `npm audit` currently reports a high-severity advisory in the transitive `ip` dependency pulled in by `sonos`.

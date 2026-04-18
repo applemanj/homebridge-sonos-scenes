@@ -38,8 +38,32 @@ test("normalizePlatformConfig applies defaults and normalizes scenes", () => {
   assert.equal(config.platform, "SonosScenes");
   assert.equal(config.name, "Custom Sonos Scenes");
   assert.equal(config.transport.allowTvSource, true);
+  assert.equal(config.cloud.mode, "local_only");
+  assert.equal(config.cloud.broker.timeoutMs, 8000);
   assert.equal(config.scenes[0].name, "Kitchen Favorite");
   assert.deepEqual(config.scenes[0].memberPlayerIds, ["player-2", "player-2"]);
   assert.equal(config.scenes[0].retryCount, 3);
   assert.equal(config.scenes[0].autoResetMs, 1000);
+});
+
+test("normalizePlatformConfig preserves future self-hosted broker settings", () => {
+  const config = normalizePlatformConfig({
+    cloud: {
+      mode: "local_plus_cloud",
+      broker: {
+        url: "https://broker.example.com/",
+        apiKey: " test-token ",
+        timeoutMs: 12000,
+        routeFavorites: true,
+        routePlaylists: false,
+      },
+    },
+  });
+
+  assert.equal(config.cloud.mode, "local_plus_cloud");
+  assert.equal(config.cloud.broker.url, "https://broker.example.com/");
+  assert.equal(config.cloud.broker.apiKey, "test-token");
+  assert.equal(config.cloud.broker.timeoutMs, 12000);
+  assert.equal(config.cloud.broker.routeFavorites, true);
+  assert.equal(config.cloud.broker.routePlaylists, false);
 });

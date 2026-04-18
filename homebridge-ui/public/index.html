@@ -74,25 +74,90 @@
   .scene-action-guide {
     display: grid;
     gap: 0.65rem;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
     margin-top: 1rem;
   }
 
-  .scene-action-guide div {
+  .scene-action-card {
+    appearance: none;
+    width: 100%;
     border: 1px solid rgba(170, 198, 255, 0.16);
     border-radius: 0.85rem;
-    padding: 0.7rem 0.8rem;
+    padding: 0.8rem 0.9rem;
     background: rgba(12, 24, 46, 0.18);
+    text-align: left;
+    transition: transform 120ms ease, border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+    box-shadow: 0 10px 24px rgba(8, 15, 30, 0.12);
+    cursor: pointer;
   }
 
-  .scene-action-guide strong {
+  .scene-action-card:hover {
+    transform: translateY(-1px);
+    background: rgba(16, 32, 60, 0.28);
+  }
+
+  .scene-action-card:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(170, 198, 255, 0.2);
+  }
+
+  .scene-action-card.discovery {
+    border-color: rgba(226, 232, 240, 0.28);
+  }
+
+  .scene-action-card.validate {
+    border-color: rgba(10, 132, 255, 0.32);
+  }
+
+  .scene-action-card.test {
+    border-color: rgba(168, 85, 247, 0.34);
+  }
+
+  .scene-action-card.save {
+    border-color: rgba(46, 213, 115, 0.34);
+  }
+
+  .scene-action-kicker {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    margin-bottom: 0.55rem;
+  }
+
+  .scene-action-card.discovery .scene-action-kicker {
+    background: rgba(226, 232, 240, 0.12);
+    color: #e5edf8;
+  }
+
+  .scene-action-card.validate .scene-action-kicker {
+    background: rgba(10, 132, 255, 0.16);
+    color: #7ec3ff;
+  }
+
+  .scene-action-card.test .scene-action-kicker {
+    background: rgba(168, 85, 247, 0.18);
+    color: #d8b4fe;
+  }
+
+  .scene-action-card.save .scene-action-kicker {
+    background: rgba(46, 213, 115, 0.16);
+    color: #78f0a9;
+  }
+
+  .scene-action-card strong {
     display: block;
     color: #f3f7ff;
     margin-bottom: 0.2rem;
-    font-size: 0.95rem;
+    font-size: 1.02rem;
+    font-weight: 600;
   }
 
-  .scene-action-guide span {
+  .scene-action-card span {
     display: block;
     color: rgba(232, 242, 255, 0.84);
     font-size: 0.87rem;
@@ -188,30 +253,28 @@
           and test them before saving.
         </p>
       </div>
-      <div class="d-flex flex-wrap gap-2">
-        <button class="btn btn-outline-secondary" id="refresh-button" type="button" title="Refresh households, rooms, groups, and favorites from Sonos.">Discover</button>
-        <button class="btn btn-outline-primary" id="validate-button" type="button" title="Check the scene against the current Sonos topology without changing playback.">Validate</button>
-        <button class="btn btn-primary" id="test-button" type="button" title="Actually run the scene on Sonos right now so you can confirm it works.">Run Test</button>
-        <button class="btn btn-success" id="save-homebridge-button" type="button" title="Write the current scene configuration into Homebridge.">Save To Homebridge</button>
-      </div>
     </div>
     <div class="scene-action-guide">
-      <div>
+      <button class="scene-action-card discovery" id="refresh-button" type="button" title="Refresh households, rooms, groups, and favorites from Sonos.">
+        <div class="scene-action-kicker">Refresh</div>
         <strong>Discover</strong>
         <span>Refresh the live list of Sonos households, rooms, groups, favorites, and inputs.</span>
-      </div>
-      <div>
+      </button>
+      <button class="scene-action-card validate" id="validate-button" type="button" title="Check the scene against the current Sonos topology without changing playback.">
+        <div class="scene-action-kicker">Safe Check</div>
         <strong>Validate</strong>
         <span>Checks your scene setup for errors against the current Sonos topology without changing anything on your speakers.</span>
-      </div>
-      <div>
+      </button>
+      <button class="scene-action-card test" id="test-button" type="button" title="Actually run the scene on Sonos right now so you can confirm it works.">
+        <div class="scene-action-kicker">Live Run</div>
         <strong>Run Test</strong>
         <span>Actually runs the scene on your Sonos system now so you can confirm the grouping, source, and volume behavior.</span>
-      </div>
-      <div>
+      </button>
+      <button class="scene-action-card save" id="save-homebridge-button" type="button" title="Write the current scene configuration into Homebridge.">
+        <div class="scene-action-kicker">Persist</div>
         <strong>Save To Homebridge</strong>
         <span>Saves the current scenes into Homebridge so they persist and appear as HomeKit switch accessories.</span>
-      </div>
+      </button>
     </div>
   </section>
 
@@ -394,6 +457,19 @@
           },
           safeConfig.transport || {},
         ),
+        cloud: {
+          mode: safeConfig.cloud?.mode === "local_plus_cloud" ? "local_plus_cloud" : "local_only",
+          broker: Object.assign(
+            {
+              url: "",
+              apiKey: "",
+              timeoutMs: 8000,
+              routeFavorites: true,
+              routePlaylists: true,
+            },
+            safeConfig.cloud?.broker || {},
+          ),
+        },
         scenes: Array.isArray(safeConfig.scenes) ? safeConfig.scenes.map(normalizeScene) : [],
       };
     }
