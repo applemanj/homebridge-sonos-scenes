@@ -37,12 +37,40 @@
     border: 1px solid rgba(22, 32, 51, 0.08);
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
     background: white;
-    overflow: hidden;
+    overflow: visible;
   }
 
   .scene-mode-panel .card-header {
     border-bottom: 1px solid rgba(22, 32, 51, 0.08);
     background: rgba(255, 255, 255, 0.65);
+  }
+
+  .scene-section-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.85rem 1rem;
+    padding: 1rem 1.15rem;
+  }
+
+  .scene-section-header-copy {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+    flex: 1 1 260px;
+  }
+
+  .scene-section-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .scene-section-actions .btn {
+    white-space: nowrap;
   }
 
   .scene-mode-panel .card-body {
@@ -66,6 +94,8 @@
 
   .scene-mode-choice input {
     margin-right: 0.65rem;
+    accent-color: var(--scene-accent);
+    transform: scale(1.08);
   }
 
   .scene-mode-choice-title {
@@ -148,7 +178,7 @@
 
   .scene-card .scene-help,
   .scene-mode-panel .scene-help {
-    color: #667085;
+    color: #556579;
   }
 
   .scene-list button {
@@ -334,7 +364,7 @@
   }
 
   .scene-inline-note {
-    color: #667085;
+    color: #5f6f84;
     font-size: 0.88rem;
     line-height: 1.45;
   }
@@ -344,10 +374,10 @@
     align-items: center;
     gap: 0.4rem;
     flex-wrap: wrap;
+    position: relative;
   }
 
   .scene-info-tag {
-    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -370,10 +400,11 @@
 
   .scene-tooltip {
     position: absolute;
-    top: 50%;
-    left: calc(100% + 0.55rem);
-    transform: translateY(-50%);
-    width: min(320px, 70vw);
+    top: calc(100% + 0.45rem);
+    left: 0;
+    transform: none;
+    width: min(320px, calc(100vw - 4rem));
+    max-width: 100%;
     padding: 0.65rem 0.75rem;
     border-radius: 0.7rem;
     border: 1px solid rgba(170, 198, 255, 0.28);
@@ -398,15 +429,6 @@
   @media (max-width: 960px) {
     .scene-grid {
       grid-template-columns: 1fr;
-    }
-  }
-
-  @media (max-width: 720px) {
-    .scene-tooltip {
-      top: calc(100% + 0.45rem);
-      left: 0;
-      transform: none;
-      width: min(280px, 78vw);
     }
   }
 </style>
@@ -444,12 +466,11 @@
 
   <section class="scene-mode-grid">
     <section class="scene-mode-panel card scene-card">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <div>
+      <div class="card-header scene-section-header">
+        <div class="scene-section-header-copy">
           <strong>Execution Mode</strong>
           <div class="scene-help">Choose whether scenes stay fully local or can use a self-hosted Sonos cloud broker later.</div>
         </div>
-        <div id="cloud-mode-pill" class="scene-status-pill local">Local Only</div>
       </div>
       <div class="card-body d-grid gap-3">
         <label class="scene-mode-choice" data-mode-choice="local_only">
@@ -539,13 +560,15 @@
 
   <div class="scene-grid">
     <section class="card scene-card">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <div>
+      <div class="card-header scene-section-header">
+        <div class="scene-section-header-copy">
           <strong>Scenes</strong>
           <div class="scene-help">Each saved scene becomes a HomeKit switch plus a companion volume speaker.</div>
           <div class="scene-inline-note mt-2">Save scene changes in the editor, then use Homebridge&apos;s footer Save button when you&apos;re ready to write everything to `config.json`.</div>
         </div>
-        <button class="btn btn-sm btn-outline-primary" id="new-scene-button" type="button">New Scene</button>
+        <div class="scene-section-actions">
+          <button class="btn btn-sm btn-outline-primary" id="new-scene-button" type="button">New Scene</button>
+        </div>
       </div>
       <div class="card-body">
         <div id="scene-list" class="scene-list"></div>
@@ -553,13 +576,13 @@
     </section>
 
     <section class="card scene-card">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <div>
+      <div class="card-header scene-section-header">
+        <div class="scene-section-header-copy">
           <strong>Scene Editor</strong>
           <div class="scene-help">Stable Sonos IDs are stored under the hood; the UI keeps room selection friendly.</div>
           <div class="scene-inline-note mt-2">Save Scene Changes updates this scene in the list above. Homebridge&apos;s footer Save button writes the full plugin config to disk.</div>
         </div>
-        <div class="d-flex gap-2">
+        <div class="scene-section-actions">
           <button class="btn btn-sm btn-outline-danger" id="delete-scene-button" type="button">Delete</button>
           <button class="btn btn-sm btn-primary" id="save-scene-button" type="button">Save Scene Changes</button>
         </div>
@@ -791,7 +814,6 @@
       testButton: document.getElementById("test-button"),
       cloudModeInputs: Array.from(document.querySelectorAll("input[name='cloud-mode']")),
       cloudModeChoices: Array.from(document.querySelectorAll("[data-mode-choice]")),
-      cloudModePill: document.getElementById("cloud-mode-pill"),
       cloudBrokerPanel: document.getElementById("cloud-broker-panel"),
       cloudBrokerCopy: document.getElementById("cloud-broker-copy"),
       cloudBrokerFields: document.getElementById("cloud-broker-fields"),
@@ -1021,8 +1043,6 @@
       });
 
       const isHybrid = cloud.mode === "local_plus_cloud";
-      elements.cloudModePill.textContent = isHybrid ? "Local + Cloud" : "Local Only";
-      elements.cloudModePill.className = `scene-status-pill ${isHybrid ? "pending" : "local"}`;
       elements.cloudBrokerPanel.classList.toggle("scene-cloud-hidden", !isHybrid);
       elements.cloudBrokerCopy.textContent = isHybrid
         ? "Only needed if you run your own broker. The settings below stay with this plugin config and are ignored whenever Local Only is active."

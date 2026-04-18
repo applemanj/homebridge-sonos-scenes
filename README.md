@@ -1,4 +1,10 @@
-# homebridge-sonos-scenes
+<p align="center">
+  <img src="docs/assets/homebridge-sonos-scenes-icon-512x512.png" alt="homebridge-sonos-scenes icon" width="164">
+</p>
+
+<h1 align="center">homebridge-sonos-scenes</h1>
+
+<p align="center">Homebridge plugin for Sonos workflow scenes and orchestration.</p>
 
 `homebridge-sonos-scenes` is a Homebridge plugin scaffold for Sonos workflow scenes.
 
