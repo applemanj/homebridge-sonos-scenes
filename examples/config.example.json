@@ -1,0 +1,48 @@
+{
+  "platforms": [
+    {
+      "platform": "SonosScenes",
+      "name": "Sonos Scenes",
+      "logLevel": "info",
+      "transport": {
+        "kind": "local",
+        "enableLiveDiscovery": true,
+        "fixturePath": "./examples/sample-topology.json",
+        "discoveryTimeoutMs": 2500,
+        "requestTimeoutMs": 5000,
+        "allowTvSource": false
+      },
+      "scenes": [
+        {
+          "id": "upper-level-line-in",
+          "name": "Upper Level Line In",
+          "householdId": "local-household",
+          "coordinatorPlayerId": "RINCON_UPPER_LEVEL",
+          "memberPlayerIds": [
+            "RINCON_PRIMARY_BEDROOM"
+          ],
+          "source": {
+            "kind": "line_in",
+            "deviceId": "RINCON_UPPER_LEVEL",
+            "deviceName": "Upper Level",
+            "playOnCompletion": true
+          },
+          "coordinatorVolume": 20,
+          "playerVolumes": [
+            {
+              "playerId": "RINCON_PRIMARY_BEDROOM",
+              "volume": 16
+            }
+          ],
+          "offBehavior": {
+            "kind": "ungroup"
+          },
+          "settleMs": 750,
+          "retryCount": 3,
+          "retryDelayMs": 750,
+          "autoResetMs": 1000
+        }
+      ]
+    }
+  ]
+}

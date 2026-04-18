@@ -1,0 +1,810 @@
+<style>
+  :root {
+    --scene-bg: linear-gradient(135deg, rgba(16, 24, 40, 0.04), rgba(10, 132, 255, 0.08));
+    --scene-accent: #0a84ff;
+    --scene-ink: #162033;
+  }
+
+  .scene-shell {
+    display: grid;
+    gap: 1rem;
+    color: var(--scene-ink);
+  }
+
+  .scene-hero {
+    border: 1px solid rgba(10, 132, 255, 0.18);
+    border-radius: 1rem;
+    padding: 1.25rem;
+    background: var(--scene-bg);
+  }
+
+  .scene-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(280px, 1fr) minmax(360px, 2fr);
+  }
+
+  .scene-card {
+    border-radius: 1rem;
+    border: 1px solid rgba(22, 32, 51, 0.08);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+  }
+
+  .scene-card .card-header {
+    border-bottom: 1px solid rgba(22, 32, 51, 0.08);
+    background: rgba(255, 255, 255, 0.65);
+  }
+
+  .scene-list button {
+    width: 100%;
+    text-align: left;
+    border-radius: 0.85rem;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid rgba(22, 32, 51, 0.08);
+    background: white;
+    margin-bottom: 0.5rem;
+  }
+
+  .scene-list button.active {
+    border-color: rgba(10, 132, 255, 0.45);
+    background: rgba(10, 132, 255, 0.08);
+  }
+
+  .scene-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 999px;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.8rem;
+    background: rgba(10, 132, 255, 0.08);
+    color: var(--scene-accent);
+  }
+
+  .scene-member-grid {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+
+  .scene-member-pill {
+    border: 1px solid rgba(22, 32, 51, 0.08);
+    border-radius: 0.85rem;
+    padding: 0.55rem 0.75rem;
+    background: white;
+  }
+
+  .scene-log {
+    max-height: 280px;
+    overflow: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.86rem;
+    background: #101828;
+    color: #d2def0;
+    border-radius: 0.85rem;
+    padding: 0.85rem;
+  }
+
+  .scene-log-line {
+    margin-bottom: 0.35rem;
+    white-space: pre-wrap;
+  }
+
+  .scene-discovery-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+
+  .scene-help {
+    color: #667085;
+    font-size: 0.92rem;
+  }
+
+  @media (max-width: 960px) {
+    .scene-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="scene-shell">
+  <section class="scene-hero">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+      <div>
+        <div class="scene-badge mb-2">Sonos Scenes</div>
+        <h2 class="h4 mb-2">Discovery-driven Sonos workflow builder</h2>
+        <p class="mb-0 scene-help">
+          Discover current rooms and groups, build switch-triggerable scenes, validate them against the live topology,
+          and test them before saving.
+        </p>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-outline-secondary" id="refresh-button" type="button">Discover</button>
+        <button class="btn btn-outline-primary" id="validate-button" type="button">Validate</button>
+        <button class="btn btn-primary" id="test-button" type="button">Run Test</button>
+        <button class="btn btn-success" id="save-homebridge-button" type="button">Save To Homebridge</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="scene-grid">
+    <section class="card scene-card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+          <strong>Scenes</strong>
+          <div class="scene-help">Each saved scene becomes a HomeKit switch accessory.</div>
+        </div>
+        <button class="btn btn-sm btn-outline-primary" id="new-scene-button" type="button">New Scene</button>
+      </div>
+      <div class="card-body">
+        <div id="scene-list" class="scene-list"></div>
+      </div>
+    </section>
+
+    <section class="card scene-card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+          <strong>Scene Editor</strong>
+          <div class="scene-help">Stable Sonos IDs are stored under the hood; the UI keeps room selection friendly.</div>
+        </div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-outline-danger" id="delete-scene-button" type="button">Delete</button>
+          <button class="btn btn-sm btn-primary" id="save-scene-button" type="button">Save Scene</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label" for="scene-name">Scene Name</label>
+            <input class="form-control" id="scene-name" type="text">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="scene-id">Scene ID</label>
+            <input class="form-control" id="scene-id" type="text" readonly>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="household-select">Household</label>
+            <select class="form-select" id="household-select"></select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="coordinator-select">Coordinator Room</label>
+            <select class="form-select" id="coordinator-select"></select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Group Members</label>
+            <div id="member-list" class="scene-member-grid"></div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="source-kind">Source Kind</label>
+            <select class="form-select" id="source-kind"></select>
+          </div>
+          <div class="col-md-8">
+            <label class="form-label" for="source-target">Source Target</label>
+            <select class="form-select" id="source-target"></select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="coordinator-volume">Coordinator Volume</label>
+            <input class="form-control" id="coordinator-volume" type="number" min="0" max="100">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="settle-ms">Settle Delay (ms)</label>
+            <input class="form-control" id="settle-ms" type="number" min="0">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="retry-count">Retry Count</label>
+            <input class="form-control" id="retry-count" type="number" min="0">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="retry-delay-ms">Retry Delay (ms)</label>
+            <input class="form-control" id="retry-delay-ms" type="number" min="0">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="auto-reset-ms">Auto Reset (ms)</label>
+            <input class="form-control" id="auto-reset-ms" type="number" min="0">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="off-behavior">Off Behavior</label>
+            <select class="form-select" id="off-behavior">
+              <option value="none">None</option>
+              <option value="ungroup">Ungroup</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Per-room Volumes</label>
+            <div id="volume-list" class="scene-member-grid"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="card scene-card">
+    <div class="card-header">
+      <strong>Discovery Snapshot</strong>
+      <div class="scene-help">The editor updates its available coordinators, members, favorites, and inputs from this topology.</div>
+    </div>
+    <div class="card-body">
+      <div id="discovery-summary" class="mb-3 scene-help"></div>
+      <div id="discovery-grid" class="scene-discovery-grid"></div>
+    </div>
+  </section>
+
+  <section class="card scene-card">
+    <div class="card-header">
+      <strong>Validation And Logs</strong>
+      <div class="scene-help">Validation uses the same transport and scene runner as the plugin runtime.</div>
+    </div>
+    <div class="card-body">
+      <div id="validation-output" class="mb-3"></div>
+      <div id="log-output" class="scene-log"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+  (() => {
+    const state = {
+      config: null,
+      topology: null,
+      draft: null,
+      activeSceneId: null,
+      validation: null,
+      lastRun: null,
+    };
+
+    const elements = {
+      sceneList: document.getElementById("scene-list"),
+      sceneName: document.getElementById("scene-name"),
+      sceneId: document.getElementById("scene-id"),
+      householdSelect: document.getElementById("household-select"),
+      coordinatorSelect: document.getElementById("coordinator-select"),
+      memberList: document.getElementById("member-list"),
+      sourceKind: document.getElementById("source-kind"),
+      sourceTarget: document.getElementById("source-target"),
+      coordinatorVolume: document.getElementById("coordinator-volume"),
+      settleMs: document.getElementById("settle-ms"),
+      retryCount: document.getElementById("retry-count"),
+      retryDelayMs: document.getElementById("retry-delay-ms"),
+      autoResetMs: document.getElementById("auto-reset-ms"),
+      offBehavior: document.getElementById("off-behavior"),
+      volumeList: document.getElementById("volume-list"),
+      validationOutput: document.getElementById("validation-output"),
+      logOutput: document.getElementById("log-output"),
+      discoverySummary: document.getElementById("discovery-summary"),
+      discoveryGrid: document.getElementById("discovery-grid"),
+      refreshButton: document.getElementById("refresh-button"),
+      validateButton: document.getElementById("validate-button"),
+      testButton: document.getElementById("test-button"),
+      saveHomebridgeButton: document.getElementById("save-homebridge-button"),
+      saveSceneButton: document.getElementById("save-scene-button"),
+      deleteSceneButton: document.getElementById("delete-scene-button"),
+      newSceneButton: document.getElementById("new-scene-button"),
+    };
+
+    function randomId() {
+      if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        return window.crypto.randomUUID();
+      }
+      return `scene-${Date.now()}-${Math.round(Math.random() * 1000)}`;
+    }
+
+    function clone(value) {
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function normalizeConfig(config) {
+      const safeConfig = config || {};
+      return {
+        platform: "SonosScenes",
+        name: safeConfig.name || "Sonos Scenes",
+        logLevel: safeConfig.logLevel || "info",
+        defaultHouseholdId: safeConfig.defaultHouseholdId || "",
+        transport: Object.assign(
+          {
+            kind: "local",
+            enableLiveDiscovery: true,
+            discoveryTimeoutMs: 2500,
+            requestTimeoutMs: 5000,
+            allowTvSource: false,
+          },
+          safeConfig.transport || {},
+        ),
+        scenes: Array.isArray(safeConfig.scenes) ? safeConfig.scenes.map(normalizeScene) : [],
+      };
+    }
+
+    function normalizeScene(scene) {
+      const safeScene = scene || {};
+      return {
+        id: safeScene.id || randomId(),
+        name: safeScene.name || "New Scene",
+        householdId: safeScene.householdId || "",
+        coordinatorPlayerId: safeScene.coordinatorPlayerId || "",
+        memberPlayerIds: Array.isArray(safeScene.memberPlayerIds) ? Array.from(new Set(safeScene.memberPlayerIds)) : [],
+        source: safeScene.source || { kind: "favorite", favoriteId: "" },
+        coordinatorVolume:
+          safeScene.coordinatorVolume === undefined || safeScene.coordinatorVolume === null
+            ? ""
+            : safeScene.coordinatorVolume,
+        playerVolumes: Array.isArray(safeScene.playerVolumes) ? safeScene.playerVolumes : [],
+        offBehavior: safeScene.offBehavior || { kind: "none" },
+        settleMs: safeScene.settleMs ?? 750,
+        retryCount: safeScene.retryCount ?? 3,
+        retryDelayMs: safeScene.retryDelayMs ?? 750,
+        autoResetMs: safeScene.autoResetMs ?? 1000,
+      };
+    }
+
+    function getActiveHousehold() {
+      if (!state.topology) {
+        return null;
+      }
+      return state.topology.households.find((household) => household.id === state.draft.householdId) || state.topology.households[0] || null;
+    }
+
+    function getPlayerName(playerId) {
+      const household = getActiveHousehold();
+      return household?.players.find((player) => player.id === playerId)?.name || playerId;
+    }
+
+    function serializeDraft() {
+      const draft = clone(state.draft);
+      draft.name = elements.sceneName.value.trim() || "New Scene";
+      draft.householdId = elements.householdSelect.value;
+      draft.coordinatorPlayerId = elements.coordinatorSelect.value;
+      draft.memberPlayerIds = Array.from(elements.memberList.querySelectorAll("input[type='checkbox']:checked")).map((checkbox) => checkbox.value);
+      draft.source = buildSourcePayload();
+      draft.coordinatorVolume = elements.coordinatorVolume.value === "" ? undefined : Number(elements.coordinatorVolume.value);
+      draft.settleMs = Number(elements.settleMs.value || 0);
+      draft.retryCount = Number(elements.retryCount.value || 0);
+      draft.retryDelayMs = Number(elements.retryDelayMs.value || 0);
+      draft.autoResetMs = Number(elements.autoResetMs.value || 0);
+      draft.offBehavior = { kind: elements.offBehavior.value };
+      draft.playerVolumes = Array.from(elements.volumeList.querySelectorAll("input[data-player-id]"))
+        .filter((input) => input.value !== "")
+        .map((input) => ({
+          playerId: input.dataset.playerId,
+          volume: Number(input.value),
+        }));
+      state.draft = normalizeScene(draft);
+      return clone(state.draft);
+    }
+
+    function buildSourcePayload() {
+      const kind = elements.sourceKind.value;
+      if (kind === "favorite") {
+        return {
+          kind,
+          favoriteId: elements.sourceTarget.value,
+          favoriteName: elements.sourceTarget.selectedOptions[0]?.textContent || "",
+        };
+      }
+
+      return {
+        kind,
+        deviceId: elements.sourceTarget.value,
+        deviceName: elements.sourceTarget.selectedOptions[0]?.textContent || "",
+        playOnCompletion: true,
+      };
+    }
+
+    function ensureDraft() {
+      if (state.draft) {
+        return;
+      }
+      const scene = state.config.scenes[0] || normalizeScene({});
+      state.activeSceneId = scene.id;
+      state.draft = normalizeScene(scene);
+    }
+
+    function renderSceneList() {
+      elements.sceneList.innerHTML = "";
+      if (state.config.scenes.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "scene-help";
+        empty.textContent = "No scenes saved yet. Create one from the editor.";
+        elements.sceneList.appendChild(empty);
+        return;
+      }
+
+      state.config.scenes.forEach((scene) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = scene.id === state.activeSceneId ? "active" : "";
+        button.innerHTML = `<strong>${scene.name}</strong><div class="scene-help">${scene.householdId || "No household selected"}</div>`;
+        button.addEventListener("click", () => {
+          state.activeSceneId = scene.id;
+          state.draft = normalizeScene(scene);
+          state.validation = null;
+          state.lastRun = null;
+          render();
+        });
+        elements.sceneList.appendChild(button);
+      });
+    }
+
+    function renderHouseholdOptions() {
+      const households = state.topology?.households || [];
+      const currentId = state.draft.householdId || state.config.defaultHouseholdId || households[0]?.id || "";
+      state.draft.householdId = currentId;
+      elements.householdSelect.innerHTML = households
+        .map((household) => `<option value="${household.id}" ${household.id === currentId ? "selected" : ""}>${household.displayName}</option>`)
+        .join("");
+    }
+
+    function renderCoordinatorOptions() {
+      const household = getActiveHousehold();
+      const players = household?.players || [];
+      const currentCoordinator = players.some((player) => player.id === state.draft.coordinatorPlayerId)
+        ? state.draft.coordinatorPlayerId
+        : players[0]?.id || "";
+      state.draft.coordinatorPlayerId = currentCoordinator;
+      elements.coordinatorSelect.innerHTML = players
+        .map((player) => `<option value="${player.id}" ${player.id === currentCoordinator ? "selected" : ""}>${player.name}</option>`)
+        .join("");
+    }
+
+    function renderMemberOptions() {
+      const household = getActiveHousehold();
+      const coordinatorId = state.draft.coordinatorPlayerId;
+      const selected = new Set(state.draft.memberPlayerIds.filter((playerId) => playerId !== coordinatorId));
+      const players = (household?.players || []).filter((player) => player.id !== coordinatorId);
+      elements.memberList.innerHTML = players.length === 0
+        ? `<div class="scene-help">No additional players are available for grouping.</div>`
+        : players
+            .map(
+              (player) => `
+                <label class="scene-member-pill">
+                  <input class="form-check-input me-2" type="checkbox" value="${player.id}" ${selected.has(player.id) ? "checked" : ""}>
+                  <strong>${player.name}</strong><br>
+                  <span class="scene-help">${(player.sourceOptions || []).join(", ") || "favorite"}</span>
+                </label>
+              `,
+            )
+            .join("");
+    }
+
+    function renderSourceControls() {
+      const household = getActiveHousehold();
+      const coordinator = household?.players.find((player) => player.id === state.draft.coordinatorPlayerId);
+      const supportedKinds = ["favorite", ...new Set((coordinator?.sourceOptions || []).filter((kind) => kind !== "favorite"))];
+      const sourceKind = supportedKinds.includes(state.draft.source?.kind) ? state.draft.source.kind : supportedKinds[0] || "favorite";
+      state.draft.source = state.draft.source || { kind: sourceKind, favoriteId: "" };
+      state.draft.source.kind = sourceKind;
+
+      elements.sourceKind.innerHTML = supportedKinds
+        .map((kind) => `<option value="${kind}" ${kind === sourceKind ? "selected" : ""}>${kind.replace("_", " ")}</option>`)
+        .join("");
+
+      if (sourceKind === "favorite") {
+        const favorites = household?.favorites || [];
+        const selectedFavorite = favorites.some((favorite) => favorite.id === state.draft.source.favoriteId)
+          ? state.draft.source.favoriteId
+          : favorites[0]?.id || "";
+        state.draft.source = {
+          kind: "favorite",
+          favoriteId: selectedFavorite,
+          favoriteName: favorites.find((favorite) => favorite.id === selectedFavorite)?.name || "",
+        };
+        elements.sourceTarget.innerHTML = favorites
+          .map((favorite) => `<option value="${favorite.id}" ${favorite.id === selectedFavorite ? "selected" : ""}>${favorite.name}</option>`)
+          .join("");
+        return;
+      }
+
+      const sourcePlayers = (household?.players || []).filter((player) => (player.sourceOptions || []).includes(sourceKind));
+      const selectedPlayer = sourcePlayers.some((player) => player.id === state.draft.source.deviceId)
+        ? state.draft.source.deviceId
+        : sourcePlayers[0]?.id || "";
+      state.draft.source = {
+        kind: sourceKind,
+        deviceId: selectedPlayer,
+        deviceName: sourcePlayers.find((player) => player.id === selectedPlayer)?.name || "",
+        playOnCompletion: true,
+      };
+      elements.sourceTarget.innerHTML = sourcePlayers
+        .map((player) => `<option value="${player.id}" ${player.id === selectedPlayer ? "selected" : ""}>${player.name}</option>`)
+        .join("");
+    }
+
+    function renderVolumeControls() {
+      const household = getActiveHousehold();
+      const selectedMembers = state.draft.memberPlayerIds || [];
+      const values = new Map((state.draft.playerVolumes || []).map((entry) => [entry.playerId, entry.volume]));
+      elements.volumeList.innerHTML = selectedMembers.length === 0
+        ? `<div class="scene-help">Select one or more member rooms to configure per-room volume overrides.</div>`
+        : selectedMembers
+            .map((playerId) => `
+              <label class="scene-member-pill">
+                <span class="d-block mb-1"><strong>${getPlayerName(playerId)}</strong></span>
+                <input class="form-control" data-player-id="${playerId}" type="number" min="0" max="100" value="${values.get(playerId) ?? ""}">
+              </label>
+            `)
+            .join("");
+    }
+
+    function renderValidation() {
+      if (!state.validation && !state.lastRun) {
+        elements.validationOutput.innerHTML = `<div class="scene-help">Validation messages and test results will appear here.</div>`;
+        return;
+      }
+
+      const sections = [];
+      if (state.validation) {
+        sections.push(`
+          <div class="mb-3">
+            <span class="badge ${state.validation.validation.valid ? "bg-success" : "bg-danger"}">
+              ${state.validation.validation.valid ? "Valid" : "Needs Attention"}
+            </span>
+          </div>
+          ${renderMessageList("Errors", state.validation.validation.errors, "danger")}
+          ${renderMessageList("Warnings", state.validation.validation.warnings, "warning")}
+        `);
+      }
+
+      if (state.lastRun) {
+        sections.push(`
+          <div class="mb-2">
+            <span class="badge ${state.lastRun.ok ? "bg-success" : "bg-danger"}">
+              ${state.lastRun.ok ? "Test Passed" : "Test Failed"}
+            </span>
+          </div>
+          ${renderMessageList("Run Errors", state.lastRun.errors || [], "danger")}
+        `);
+      }
+
+      elements.validationOutput.innerHTML = sections.join("");
+    }
+
+    function renderMessageList(title, messages, tone) {
+      if (!messages || messages.length === 0) {
+        return "";
+      }
+      return `
+        <div class="alert alert-${tone} py-2">
+          <strong>${title}</strong>
+          <ul class="mb-0 mt-2">
+            ${messages.map((message) => `<li>${message}</li>`).join("")}
+          </ul>
+        </div>
+      `;
+    }
+
+    function renderLogs() {
+      const logLines = (state.lastRun?.logs || []).map((entry) => {
+        return `<div class="scene-log-line">[${entry.level.toUpperCase()}] ${entry.scope}: ${entry.message}</div>`;
+      });
+      elements.logOutput.innerHTML = logLines.length > 0
+        ? logLines.join("")
+        : `<div class="scene-log-line">No run logs yet.</div>`;
+    }
+
+    function renderDiscovery() {
+      const households = state.topology?.households || [];
+      if (households.length === 0) {
+        elements.discoverySummary.textContent = "No Sonos households discovered yet.";
+        elements.discoveryGrid.innerHTML = "";
+        return;
+      }
+
+      elements.discoverySummary.textContent = `Snapshot origin: ${state.topology.origin}. ${households.length} household(s) discovered at ${new Date(state.topology.capturedAt).toLocaleString()}.`;
+      elements.discoveryGrid.innerHTML = households
+        .map((household) => {
+          const groups = household.groups
+            .map((group) => {
+              const memberNames = group.playerIds.map((playerId) => household.players.find((player) => player.id === playerId)?.name || playerId);
+              return `<li><strong>${group.name}</strong>: ${memberNames.join(", ")}</li>`;
+            })
+            .join("");
+
+          const players = household.players
+            .map((player) => `<li><strong>${player.name}</strong> <span class="scene-help">${player.model || "Unknown model"} · ${(player.sourceOptions || []).join(", ")}</span></li>`)
+            .join("");
+
+          const favorites = (household.favorites || []).map((favorite) => `<li>${favorite.name}</li>`).join("");
+
+          return `
+            <div class="card h-100">
+              <div class="card-body">
+                <h5 class="card-title">${household.displayName}</h5>
+                <p class="scene-help mb-3">${household.id}</p>
+                <strong>Players</strong>
+                <ul>${players || "<li>None</li>"}</ul>
+                <strong>Current Groups</strong>
+                <ul>${groups || "<li>None</li>"}</ul>
+                <strong>Favorites</strong>
+                <ul>${favorites || "<li>None</li>"}</ul>
+              </div>
+            </div>
+          `;
+        })
+        .join("");
+    }
+
+    function renderInputs() {
+      elements.sceneName.value = state.draft.name || "";
+      elements.sceneId.value = state.draft.id || "";
+      renderHouseholdOptions();
+      renderCoordinatorOptions();
+      renderMemberOptions();
+      renderSourceControls();
+      elements.coordinatorVolume.value = state.draft.coordinatorVolume === "" ? "" : state.draft.coordinatorVolume ?? "";
+      elements.settleMs.value = state.draft.settleMs ?? 750;
+      elements.retryCount.value = state.draft.retryCount ?? 3;
+      elements.retryDelayMs.value = state.draft.retryDelayMs ?? 750;
+      elements.autoResetMs.value = state.draft.autoResetMs ?? 1000;
+      elements.offBehavior.value = state.draft.offBehavior?.kind || "none";
+      renderVolumeControls();
+    }
+
+    function render() {
+      ensureDraft();
+      renderSceneList();
+      renderInputs();
+      renderValidation();
+      renderLogs();
+      renderDiscovery();
+    }
+
+    async function persistConfig(showToast) {
+      await homebridge.updatePluginConfig([clone(state.config)]);
+      if (showToast) {
+        homebridge.toast.success("Scene configuration updated in Homebridge memory.");
+      }
+    }
+
+    async function discover() {
+      homebridge.showSpinner();
+      try {
+        const result = await homebridge.request("/discover", { config: state.config });
+        state.topology = result.snapshot;
+        if (!state.draft.householdId && state.topology.households[0]) {
+          state.draft.householdId = state.config.defaultHouseholdId || state.topology.households[0].id;
+        }
+        render();
+      } catch (error) {
+        homebridge.toast.error(error.message || "Discovery failed.");
+      } finally {
+        homebridge.hideSpinner();
+      }
+    }
+
+    async function validateDraft() {
+      serializeDraft();
+      homebridge.showSpinner();
+      try {
+        state.validation = await homebridge.request("/validate-scene", {
+          config: state.config,
+          scene: state.draft,
+        });
+        render();
+      } catch (error) {
+        homebridge.toast.error(error.message || "Validation failed.");
+      } finally {
+        homebridge.hideSpinner();
+      }
+    }
+
+    async function runTest() {
+      serializeDraft();
+      homebridge.showSpinner();
+      try {
+        state.lastRun = await homebridge.request("/run-test", {
+          config: state.config,
+          scene: state.draft,
+        });
+        render();
+      } catch (error) {
+        homebridge.toast.error(error.message || "Scene test failed.");
+      } finally {
+        homebridge.hideSpinner();
+      }
+    }
+
+    async function saveScene() {
+      const draft = serializeDraft();
+      const index = state.config.scenes.findIndex((scene) => scene.id === draft.id);
+      if (index >= 0) {
+        state.config.scenes[index] = draft;
+      } else {
+        state.config.scenes.push(draft);
+      }
+      state.activeSceneId = draft.id;
+      await persistConfig(true);
+      render();
+    }
+
+    async function deleteScene() {
+      if (!state.draft) {
+        return;
+      }
+      state.config.scenes = state.config.scenes.filter((scene) => scene.id !== state.draft.id);
+      state.activeSceneId = state.config.scenes[0]?.id || null;
+      state.draft = state.config.scenes[0] ? normalizeScene(state.config.scenes[0]) : normalizeScene({});
+      await persistConfig(true);
+      render();
+    }
+
+    function newScene() {
+      state.activeSceneId = null;
+      state.draft = normalizeScene({
+        id: randomId(),
+        householdId: state.topology?.households[0]?.id || state.config.defaultHouseholdId || "",
+      });
+      state.validation = null;
+      state.lastRun = null;
+      render();
+    }
+
+    async function saveToHomebridge() {
+      await persistConfig(false);
+      await homebridge.savePluginConfig();
+      homebridge.toast.success("Configuration saved to config.json.");
+    }
+
+    function bindEvents() {
+      elements.refreshButton.addEventListener("click", discover);
+      elements.validateButton.addEventListener("click", validateDraft);
+      elements.testButton.addEventListener("click", runTest);
+      elements.saveSceneButton.addEventListener("click", saveScene);
+      elements.deleteSceneButton.addEventListener("click", deleteScene);
+      elements.newSceneButton.addEventListener("click", newScene);
+      elements.saveHomebridgeButton.addEventListener("click", saveToHomebridge);
+
+      elements.householdSelect.addEventListener("change", () => {
+        serializeDraft();
+        state.draft.coordinatorPlayerId = "";
+        state.draft.memberPlayerIds = [];
+        state.draft.playerVolumes = [];
+        render();
+      });
+
+      elements.coordinatorSelect.addEventListener("change", () => {
+        serializeDraft();
+        state.draft.memberPlayerIds = state.draft.memberPlayerIds.filter((playerId) => playerId !== state.draft.coordinatorPlayerId);
+        render();
+      });
+
+      elements.sourceKind.addEventListener("change", () => {
+        serializeDraft();
+        state.draft.source = elements.sourceKind.value === "favorite"
+          ? { kind: "favorite", favoriteId: "" }
+          : { kind: elements.sourceKind.value, deviceId: "", playOnCompletion: true };
+        render();
+      });
+
+      homebridge.addEventListener("scene-test-result", (event) => {
+        state.lastRun = event.data;
+        render();
+      });
+
+      homebridge.addEventListener("configChanged", (event) => {
+        const schemaConfig = normalizeConfig(event.data);
+        state.config = Object.assign({}, state.config, schemaConfig, {
+          scenes: state.config.scenes,
+        });
+      });
+    }
+
+    async function init() {
+      homebridge.showSchemaForm();
+      bindEvents();
+
+      const pluginConfig = await homebridge.getPluginConfig();
+      if (!pluginConfig.length) {
+        state.config = normalizeConfig(await homebridge.request("/defaults"));
+        await homebridge.updatePluginConfig([clone(state.config)]);
+      } else {
+        state.config = normalizeConfig(pluginConfig[0]);
+      }
+
+      state.activeSceneId = state.config.scenes[0]?.id || null;
+      state.draft = state.config.scenes[0] ? normalizeScene(state.config.scenes[0]) : normalizeScene({});
+      render();
+      await discover();
+    }
+
+    homebridge.addEventListener("ready", init);
+  })();
+</script>

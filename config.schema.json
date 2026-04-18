@@ -1,0 +1,86 @@
+{
+  "pluginAlias": "SonosScenes",
+  "pluginType": "platform",
+  "singular": true,
+  "customUi": true,
+  "headerDisplay": "Discovery-driven Sonos workflow scenes for Homebridge.",
+  "footerDisplay": "Use the custom UI to discover players, validate scenes, and test execution.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "Sonos Scenes",
+        "required": true
+      },
+      "platform": {
+        "title": "Platform",
+        "type": "string",
+        "default": "SonosScenes",
+        "required": true
+      },
+      "logLevel": {
+        "title": "Log Level",
+        "type": "string",
+        "default": "info",
+        "oneOf": [
+          "debug",
+          "info",
+          "warn",
+          "error"
+        ]
+      },
+      "defaultHouseholdId": {
+        "title": "Default Household Id",
+        "type": "string"
+      },
+      "transport": {
+        "title": "Transport",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string",
+            "default": "local",
+            "oneOf": [
+              "local"
+            ]
+          },
+          "enableLiveDiscovery": {
+            "title": "Enable Live Discovery",
+            "type": "boolean",
+            "default": true
+          },
+          "fixturePath": {
+            "title": "Fixture Path",
+            "type": "string"
+          },
+          "discoveryTimeoutMs": {
+            "title": "Discovery Timeout (ms)",
+            "type": "integer",
+            "default": 2500
+          },
+          "requestTimeoutMs": {
+            "title": "Request Timeout (ms)",
+            "type": "integer",
+            "default": 5000
+          },
+          "allowTvSource": {
+            "title": "Allow TV Source",
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "scenes": {
+        "title": "Scenes",
+        "type": "array",
+        "items": {
+          "type": "object"
+        },
+        "default": []
+      }
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "name": "homebridge-sonos-scenes",
+  "version": "0.1.0",
+  "description": "Homebridge plugin for Sonos workflow scenes and orchestration.",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "if exist dist rmdir /s /q dist",
+    "test": "npm run build && node --test dist/test/config.test.js dist/test/sceneRunner.test.js dist/test/validation.test.js"
+  },
+  "files": [
+    "dist",
+    "homebridge-ui",
+    "config.schema.json",
+    "README.md",
+    "LICENSE",
+    "examples"
+  ],
+  "keywords": [
+    "homebridge-plugin",
+    "homebridge",
+    "sonos",
+    "scenes",
+    "homekit"
+  ],
+  "engines": {
+    "homebridge": "^1.8.0 || ^2.0.0-beta.0",
+    "node": "^18.20.0 || ^20.18.0 || ^22.0.0"
+  },
+  "dependencies": {
+    "@homebridge/plugin-ui-utils": "^2.2.3",
+    "homebridge": "^1.11.4",
+    "sonos": "^1.14.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "typescript": "^5.8.3"
+  },
+  "license": "MIT"
+}
