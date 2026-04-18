@@ -41,6 +41,9 @@ examples/
   sample-topology.json
 docs/
   cloud-broker.md
+broker/
+  README.md
+  src/server.mjs
 test/
 ```
 
@@ -96,6 +99,8 @@ The intended product shape is now:
 This project does not host that broker for users. The goal is an optional self-hosted companion service, not a shared multi-tenant cloud run by the plugin maintainer.
 
 The config model already reserves a `cloud` section so advanced users and future versions do not need a breaking config redesign later. The broker contract is documented in [docs/cloud-broker.md](docs/cloud-broker.md).
+
+There is also an early self-hosted broker scaffold in [broker/README.md](broker/README.md). It is not wired into scene execution yet, but it gives self-hosters a concrete service shape and a live `/v1/status` endpoint to target.
 
 ## Official Sonos References
 

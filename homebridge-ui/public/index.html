@@ -27,6 +27,95 @@
     color: rgba(232, 242, 255, 0.88);
   }
 
+  .scene-mode-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(280px, 1.1fr) minmax(320px, 1.3fr);
+  }
+
+  .scene-mode-panel {
+    border-radius: 1rem;
+    border: 1px solid rgba(22, 32, 51, 0.08);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+    background: white;
+    overflow: hidden;
+  }
+
+  .scene-mode-panel .card-header {
+    border-bottom: 1px solid rgba(22, 32, 51, 0.08);
+    background: rgba(255, 255, 255, 0.65);
+  }
+
+  .scene-mode-choice {
+    display: block;
+    border: 1px solid rgba(22, 32, 51, 0.1);
+    border-radius: 0.85rem;
+    padding: 0.85rem 0.95rem;
+    background: #fff;
+    cursor: pointer;
+  }
+
+  .scene-mode-choice.active {
+    border-color: rgba(10, 132, 255, 0.42);
+    background: rgba(10, 132, 255, 0.06);
+  }
+
+  .scene-mode-choice input {
+    margin-right: 0.65rem;
+  }
+
+  .scene-mode-choice-title {
+    color: var(--scene-ink);
+    font-weight: 600;
+  }
+
+  .scene-mode-choice-copy {
+    display: block;
+    color: #667085;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    margin-top: 0.35rem;
+  }
+
+  .scene-cloud-settings {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .scene-cloud-hidden {
+    display: none;
+  }
+
+  .scene-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.25rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .scene-status-pill.local {
+    background: rgba(10, 132, 255, 0.08);
+    color: #0a84ff;
+  }
+
+  .scene-status-pill.pending {
+    background: rgba(245, 158, 11, 0.14);
+    color: #b45309;
+  }
+
+  .scene-status-pill.success {
+    background: rgba(46, 213, 115, 0.14);
+    color: #0f9f50;
+  }
+
+  .scene-status-pill.error {
+    background: rgba(239, 68, 68, 0.14);
+    color: #b42318;
+  }
+
   .scene-grid {
     display: grid;
     gap: 1rem;
@@ -236,6 +325,10 @@
   }
 
   @media (max-width: 960px) {
+    .scene-mode-grid {
+      grid-template-columns: 1fr;
+    }
+
     .scene-grid {
       grid-template-columns: 1fr;
     }
@@ -276,6 +369,80 @@
         <span>Saves the current scenes into Homebridge so they persist and appear as HomeKit switch accessories.</span>
       </button>
     </div>
+  </section>
+
+  <section class="scene-mode-grid">
+    <section class="scene-mode-panel">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+          <strong>Execution Mode</strong>
+          <div class="scene-help">Choose whether scenes stay fully local or can use a self-hosted Sonos cloud broker later.</div>
+        </div>
+        <div id="cloud-mode-pill" class="scene-status-pill local">Local Only</div>
+      </div>
+      <div class="card-body d-grid gap-3">
+        <label class="scene-mode-choice" data-mode-choice="local_only">
+          <span class="d-flex align-items-start">
+            <input type="radio" name="cloud-mode" value="local_only">
+            <span>
+              <span class="scene-mode-choice-title">Local Only</span>
+              <span class="scene-mode-choice-copy">Best for line-in, grouping, TV, and favorites that already work over the local Sonos path. No external broker required.</span>
+            </span>
+          </span>
+        </label>
+        <label class="scene-mode-choice" data-mode-choice="local_plus_cloud">
+          <span class="d-flex align-items-start">
+            <input type="radio" name="cloud-mode" value="local_plus_cloud">
+            <span>
+              <span class="scene-mode-choice-title">Local + Cloud</span>
+              <span class="scene-mode-choice-copy">Future-ready mode for self-hosters who run their own Sonos cloud broker to support favorites and playlists that are not reliable locally.</span>
+            </span>
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <section class="scene-mode-panel">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+          <strong>Cloud Broker</strong>
+          <div class="scene-help">Optional. Only needed if you choose Local + Cloud and run your own broker service.</div>
+        </div>
+        <button class="btn btn-sm btn-outline-primary" id="check-broker-button" type="button">Check Broker</button>
+      </div>
+      <div class="card-body scene-cloud-settings">
+        <div id="cloud-broker-copy" class="scene-help">Local Only is active. Broker settings are preserved, but they are not used until you switch modes.</div>
+        <div id="cloud-broker-fields" class="scene-cloud-hidden">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label" for="broker-url">Broker URL</label>
+              <input class="form-control" id="broker-url" type="url" placeholder="https://sonos-broker.example.com">
+            </div>
+            <div class="col-md-8">
+              <label class="form-label" for="broker-api-key">Broker API Key</label>
+              <input class="form-control" id="broker-api-key" type="password" placeholder="Optional bearer token">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="broker-timeout-ms">Timeout (ms)</label>
+              <input class="form-control" id="broker-timeout-ms" type="number" min="1000">
+            </div>
+            <div class="col-md-6">
+              <label class="form-check">
+                <input class="form-check-input" id="broker-route-favorites" type="checkbox">
+                <span class="form-check-label">Route favorites through broker</span>
+              </label>
+            </div>
+            <div class="col-md-6">
+              <label class="form-check">
+                <input class="form-check-input" id="broker-route-playlists" type="checkbox">
+                <span class="form-check-label">Route playlists through broker</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div id="broker-status-output" class="scene-help">No broker check has been run yet.</div>
+      </div>
+    </section>
   </section>
 
   <div class="scene-grid">
@@ -398,6 +565,7 @@
       activeSceneId: null,
       validation: null,
       lastRun: null,
+      brokerStatus: null,
     };
 
     const elements = {
@@ -424,6 +592,18 @@
       validateButton: document.getElementById("validate-button"),
       testButton: document.getElementById("test-button"),
       saveHomebridgeButton: document.getElementById("save-homebridge-button"),
+      cloudModeInputs: Array.from(document.querySelectorAll("input[name='cloud-mode']")),
+      cloudModeChoices: Array.from(document.querySelectorAll("[data-mode-choice]")),
+      cloudModePill: document.getElementById("cloud-mode-pill"),
+      cloudBrokerCopy: document.getElementById("cloud-broker-copy"),
+      cloudBrokerFields: document.getElementById("cloud-broker-fields"),
+      brokerUrl: document.getElementById("broker-url"),
+      brokerApiKey: document.getElementById("broker-api-key"),
+      brokerTimeoutMs: document.getElementById("broker-timeout-ms"),
+      brokerRouteFavorites: document.getElementById("broker-route-favorites"),
+      brokerRoutePlaylists: document.getElementById("broker-route-playlists"),
+      brokerStatusOutput: document.getElementById("broker-status-output"),
+      checkBrokerButton: document.getElementById("check-broker-button"),
       saveSceneButton: document.getElementById("save-scene-button"),
       deleteSceneButton: document.getElementById("delete-scene-button"),
       newSceneButton: document.getElementById("new-scene-button"),
@@ -472,6 +652,21 @@
         },
         scenes: Array.isArray(safeConfig.scenes) ? safeConfig.scenes.map(normalizeScene) : [],
       };
+    }
+
+    function serializeCloudConfig() {
+      const mode = elements.cloudModeInputs.find((input) => input.checked)?.value || "local_only";
+      state.config.cloud = {
+        mode,
+        broker: {
+          url: elements.brokerUrl.value.trim(),
+          apiKey: elements.brokerApiKey.value.trim(),
+          timeoutMs: Number(elements.brokerTimeoutMs.value || 8000),
+          routeFavorites: Boolean(elements.brokerRouteFavorites.checked),
+          routePlaylists: Boolean(elements.brokerRoutePlaylists.checked),
+        },
+      };
+      return state.config.cloud;
     }
 
     function normalizeScene(scene) {
@@ -527,6 +722,7 @@
     }
 
     function serializeDraft() {
+      serializeCloudConfig();
       const draft = clone(state.draft);
       draft.name = elements.sceneName.value.trim() || "New Scene";
       draft.householdId = elements.householdSelect.value;
@@ -603,6 +799,85 @@
         });
         elements.sceneList.appendChild(button);
       });
+    }
+
+    function renderCloudModeControls() {
+      const cloud = state.config.cloud || {
+        mode: "local_only",
+        broker: {
+          url: "",
+          apiKey: "",
+          timeoutMs: 8000,
+          routeFavorites: true,
+          routePlaylists: true,
+        },
+      };
+
+      elements.cloudModeInputs.forEach((input) => {
+        input.checked = input.value === cloud.mode;
+      });
+
+      elements.cloudModeChoices.forEach((choice) => {
+        choice.classList.toggle("active", choice.dataset.modeChoice === cloud.mode);
+      });
+
+      const isHybrid = cloud.mode === "local_plus_cloud";
+      elements.cloudModePill.textContent = isHybrid ? "Local + Cloud" : "Local Only";
+      elements.cloudModePill.className = `scene-status-pill ${isHybrid ? "pending" : "local"}`;
+      elements.cloudBrokerFields.classList.toggle("scene-cloud-hidden", !isHybrid);
+      elements.cloudBrokerCopy.textContent = isHybrid
+        ? "Enter the URL for your self-hosted broker and optionally an API key. The plugin can then check that broker before cloud-backed scene support is wired in."
+        : "Local Only is active. Broker settings are preserved, but they are not used until you switch modes.";
+
+      elements.brokerUrl.value = cloud.broker?.url || "";
+      elements.brokerApiKey.value = cloud.broker?.apiKey || "";
+      elements.brokerTimeoutMs.value = cloud.broker?.timeoutMs ?? 8000;
+      elements.brokerRouteFavorites.checked = cloud.broker?.routeFavorites !== false;
+      elements.brokerRoutePlaylists.checked = cloud.broker?.routePlaylists !== false;
+
+      renderBrokerStatus();
+    }
+
+    function renderBrokerStatus() {
+      const cloud = state.config.cloud;
+      const status = state.brokerStatus;
+
+      if (cloud.mode !== "local_plus_cloud") {
+        elements.brokerStatusOutput.innerHTML = `<span class="scene-help">Broker checks are optional while Local Only is active.</span>`;
+        return;
+      }
+
+      if (!cloud.broker.url) {
+        elements.brokerStatusOutput.innerHTML = `<span class="scene-status-pill pending">Needs URL</span> <span class="scene-help">Enter your self-hosted broker URL, then click Check Broker.</span>`;
+        return;
+      }
+
+      if (!status) {
+        elements.brokerStatusOutput.innerHTML = `<span class="scene-status-pill pending">Not Checked</span> <span class="scene-help">Broker configured at ${cloud.broker.url}. Run a check to verify it responds.</span>`;
+        return;
+      }
+
+      if (status.error) {
+        elements.brokerStatusOutput.innerHTML = `<span class="scene-status-pill error">Broker Error</span> <span class="scene-help">${status.error}</span>`;
+        return;
+      }
+
+      const brokerStatus = status.status;
+      if (!brokerStatus) {
+        elements.brokerStatusOutput.innerHTML = `<span class="scene-status-pill pending">Unknown</span> <span class="scene-help">The broker returned no status payload.</span>`;
+        return;
+      }
+
+      const featureText = Array.isArray(brokerStatus.features) && brokerStatus.features.length > 0
+        ? brokerStatus.features.join(", ")
+        : "none reported";
+      const readiness = brokerStatus.oauthConfigured === false
+        ? "OAuth is not configured yet."
+        : brokerStatus.message || "Broker responded successfully.";
+      elements.brokerStatusOutput.innerHTML = `
+        <span class="scene-status-pill success">${brokerStatus.mode === "scaffold" ? "Scaffold" : "Ready"}</span>
+        <span class="scene-help"><strong>${brokerStatus.name || "Broker"}</strong> ${brokerStatus.version ? `v${brokerStatus.version}` : ""} at ${status.url || state.config.cloud.broker.url}. Features: ${featureText}. ${readiness}</span>
+      `;
     }
 
     function renderHouseholdOptions() {
@@ -832,6 +1107,7 @@
     }
 
     function renderInputs() {
+      renderCloudModeControls();
       elements.sceneName.value = state.draft.name || "";
       elements.sceneId.value = state.draft.id || "";
       renderHouseholdOptions();
@@ -864,6 +1140,7 @@
     }
 
     async function discover() {
+      serializeCloudConfig();
       homebridge.showSpinner();
       try {
         const result = await homebridge.request("/discover", { config: state.config });
@@ -947,9 +1224,36 @@
     }
 
     async function saveToHomebridge() {
+      serializeCloudConfig();
       await persistConfig(false);
       await homebridge.savePluginConfig();
       homebridge.toast.success("Configuration saved to config.json.");
+    }
+
+    async function checkBroker() {
+      serializeCloudConfig();
+      if (!state.config.cloud.broker.url) {
+        state.brokerStatus = {
+          error: "Enter a broker URL first.",
+        };
+        render();
+        return;
+      }
+
+      homebridge.showSpinner();
+      try {
+        state.brokerStatus = await homebridge.request("/broker-status", {
+          config: state.config,
+        });
+        render();
+      } catch (error) {
+        state.brokerStatus = {
+          error: error.message || "Broker check failed.",
+        };
+        render();
+      } finally {
+        homebridge.hideSpinner();
+      }
     }
 
     function bindEvents() {
@@ -960,6 +1264,29 @@
       elements.deleteSceneButton.addEventListener("click", deleteScene);
       elements.newSceneButton.addEventListener("click", newScene);
       elements.saveHomebridgeButton.addEventListener("click", saveToHomebridge);
+      elements.checkBrokerButton.addEventListener("click", checkBroker);
+
+      elements.cloudModeInputs.forEach((input) => {
+        input.addEventListener("change", () => {
+          serializeCloudConfig();
+          state.brokerStatus = null;
+          render();
+        });
+      });
+
+      [
+        elements.brokerUrl,
+        elements.brokerApiKey,
+        elements.brokerTimeoutMs,
+        elements.brokerRouteFavorites,
+        elements.brokerRoutePlaylists,
+      ].forEach((element) => {
+        element.addEventListener("change", () => {
+          serializeCloudConfig();
+          state.brokerStatus = null;
+          renderBrokerStatus();
+        });
+      });
 
       elements.householdSelect.addEventListener("change", () => {
         serializeDraft();
@@ -993,6 +1320,7 @@
         state.config = Object.assign({}, state.config, schemaConfig, {
           scenes: state.config.scenes,
         });
+        state.brokerStatus = null;
       });
     }
 

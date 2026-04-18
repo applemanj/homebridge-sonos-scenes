@@ -8,6 +8,9 @@ export interface CloudBrokerStatus {
   version?: string;
   features: CloudBrokerFeature[];
   docsUrl?: string;
+  mode?: "scaffold" | "live";
+  oauthConfigured?: boolean;
+  message?: string;
 }
 
 function trimTrailingSlash(value: string): string {

@@ -1,0 +1,15 @@
+{
+  "name": "sonos-scenes-broker",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Self-hosted Sonos cloud broker scaffold for homebridge-sonos-scenes.",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "dev": "node --watch src/server.mjs"
+  },
+  "engines": {
+    "node": ">=18.20.0"
+  },
+  "license": "MIT"
+}

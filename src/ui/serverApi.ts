@@ -1,4 +1,5 @@
 import { normalizePlatformConfig, normalizeScene, validateSceneDefinition } from "../config";
+import { CloudBrokerClient } from "../cloud/brokerClient";
 import { DiscoveryService } from "../discoveryService";
 import { MemoryLogCollector, StructuredLogger } from "../logger";
 import { SceneRunner } from "../sceneRunner";
@@ -58,4 +59,32 @@ export async function runTestForUi(
   const services = await buildServices(configInput);
   const scene = normalizeScene(sceneInput);
   return services.sceneRunner.runTest(scene);
+}
+
+export async function checkBrokerForUi(
+  configInput: Partial<ScenesPlatformConfig> | undefined,
+): Promise<{ configured: boolean; url?: string; status?: Awaited<ReturnType<CloudBrokerClient["getStatus"]>>; error?: string }> {
+  const config = normalizePlatformConfig(configInput);
+  const client = new CloudBrokerClient(config.cloud.broker);
+
+  if (!client.configured) {
+    return {
+      configured: false,
+    };
+  }
+
+  try {
+    const status = await client.getStatus();
+    return {
+      configured: true,
+      url: client.baseUrl,
+      status,
+    };
+  } catch (error) {
+    return {
+      configured: true,
+      url: client.baseUrl,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }

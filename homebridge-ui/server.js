@@ -19,6 +19,7 @@ class UiServer extends HomebridgePluginUiServer {
     this.onRequest("/discover", this.handleDiscover.bind(this));
     this.onRequest("/validate-scene", this.handleValidateScene.bind(this));
     this.onRequest("/run-test", this.handleRunTest.bind(this));
+    this.onRequest("/broker-status", this.handleBrokerStatus.bind(this));
 
     this.ready();
   }
@@ -50,6 +51,14 @@ class UiServer extends HomebridgePluginUiServer {
       return result;
     } catch (error) {
       throw this.asRequestError(error, "Scene test failed");
+    }
+  }
+
+  async handleBrokerStatus(payload = {}) {
+    try {
+      return await this.serverApi.checkBrokerForUi(payload.config);
+    } catch (error) {
+      throw this.asRequestError(error, "Broker check failed");
     }
   }
 

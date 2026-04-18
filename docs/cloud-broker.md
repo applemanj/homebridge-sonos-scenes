@@ -4,6 +4,8 @@ This project is intentionally local-first. For some Sonos favorites and playlist
 
 This document defines the shape of that future broker so the Homebridge plugin can support a `local_plus_cloud` mode without forcing the maintainer to host user tokens.
 
+An initial self-hosted scaffold now lives under [broker/](../broker/README.md). It exposes the status endpoint and reserves the future route surface, but it does not implement Sonos OAuth or cloud playback yet.
+
 ## Design Goals
 
 - Keep the Homebridge plugin installable and useful with no cloud dependency.
