@@ -54,6 +54,30 @@ npm test
 
 For Homebridge development, point the plugin at a config shaped like [examples/config.example.json](examples/config.example.json).
 
+## Official Homebridge Test Path
+
+If you want to test it the normal Homebridge way, publish it to npm and install it from Homebridge by package name.
+
+This repo is set up for that flow now:
+
+- `prepare` builds `dist/` for Git-based installs.
+- `prepack` rebuilds `dist/` before `npm publish` so the published tarball contains runnable plugin files.
+- the published package includes `dist/`, `homebridge-ui/`, `config.schema.json`, and the example/docs assets listed in `package.json`.
+
+Typical release flow:
+
+```bash
+npm login
+npm test
+npm publish
+```
+
+After that, install `homebridge-sonos-scenes` from the Homebridge UI or via npm in the normal Homebridge plugin workflow.
+
+The Homebridge project’s verified-plugin guidance also expects the plugin to be published to npm with source available on GitHub:
+
+- Homebridge Verified Plugins: <https://github.com/homebridge/homebridge/wiki/verified-Plugins>
+
 ## Transport Notes
 
 - The default transport is `local`.
