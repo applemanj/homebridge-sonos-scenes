@@ -488,8 +488,17 @@ export class LocalSonosTransport implements SonosTransport {
       return;
     }
 
+    const normalizedVolume = Math.max(0, Math.min(100, Math.round(volume)));
+    if (this.livePlayers.size === 0) {
+      for (const playerId of group.playerIds) {
+        this.fixtureAudioState(playerId).volume = normalizedVolume;
+      }
+      this.touchFixture(householdId);
+      return;
+    }
+
     for (const playerId of group.playerIds) {
-      await this.setPlayerVolume(householdId, playerId, volume);
+      await this.setLivePlayerVolume(playerId, normalizedVolume);
     }
   }
 
@@ -503,7 +512,9 @@ export class LocalSonosTransport implements SonosTransport {
       return this.getPlayerVolume(householdId, coordinatorPlayerId);
     }
 
-    const volumes = await Promise.all(group.playerIds.map((playerId) => this.getPlayerVolume(householdId, playerId)));
+    const volumes = this.livePlayers.size === 0
+      ? group.playerIds.map((playerId) => this.fixtureAudioState(playerId).volume)
+      : await Promise.all(group.playerIds.map((playerId) => this.getLivePlayerVolume(playerId)));
     if (volumes.length === 0) {
       return 0;
     }
@@ -518,8 +529,7 @@ export class LocalSonosTransport implements SonosTransport {
     }
 
     this.requireHousehold(await this.discoverTopology(), householdId);
-    const player = this.requireLiveRecord(playerId);
-    return Math.max(0, Math.min(100, Math.round(await this.audioDevice(player.device).getVolume())));
+    return this.getLivePlayerVolume(playerId);
   }
 
   async setPlayerVolume(householdId: string, playerId: string, volume: number): Promise<void> {
@@ -531,8 +541,7 @@ export class LocalSonosTransport implements SonosTransport {
     }
 
     this.requireHousehold(await this.discoverTopology(), householdId);
-    const player = this.requireLiveRecord(playerId);
-    await player.device.setVolume(Math.max(0, Math.min(100, Math.round(volume))));
+    await this.setLivePlayerVolume(playerId, volume);
   }
 
   async getGroupMuted(householdId: string, coordinatorPlayerId: string): Promise<boolean> {
@@ -545,7 +554,9 @@ export class LocalSonosTransport implements SonosTransport {
       return this.getPlayerMuted(householdId, coordinatorPlayerId);
     }
 
-    const states = await Promise.all(group.playerIds.map((playerId) => this.getPlayerMuted(householdId, playerId)));
+    const states = this.livePlayers.size === 0
+      ? group.playerIds.map((playerId) => this.fixtureAudioState(playerId).muted)
+      : await Promise.all(group.playerIds.map((playerId) => this.getLivePlayerMuted(playerId)));
     return states.length > 0 && states.every(Boolean);
   }
 
@@ -560,8 +571,16 @@ export class LocalSonosTransport implements SonosTransport {
       return;
     }
 
+    if (this.livePlayers.size === 0) {
+      for (const playerId of group.playerIds) {
+        this.fixtureAudioState(playerId).muted = muted;
+      }
+      this.touchFixture(householdId);
+      return;
+    }
+
     for (const playerId of group.playerIds) {
-      await this.setPlayerMuted(householdId, playerId, muted);
+      await this.setLivePlayerMuted(playerId, muted);
     }
   }
 
@@ -572,8 +591,7 @@ export class LocalSonosTransport implements SonosTransport {
     }
 
     this.requireHousehold(await this.discoverTopology(), householdId);
-    const player = this.requireLiveRecord(playerId);
-    return await this.audioDevice(player.device).getMuted();
+    return this.getLivePlayerMuted(playerId);
   }
 
   async setPlayerMuted(householdId: string, playerId: string, muted: boolean): Promise<void> {
@@ -585,8 +603,7 @@ export class LocalSonosTransport implements SonosTransport {
     }
 
     this.requireHousehold(await this.discoverTopology(), householdId);
-    const player = this.requireLiveRecord(playerId);
-    await this.audioDevice(player.device).setMuted(muted);
+    await this.setLivePlayerMuted(playerId, muted);
   }
 
   async ungroup(householdId: string, coordinatorPlayerId: string, memberPlayerIds?: string[]): Promise<void> {
@@ -828,6 +845,26 @@ export class LocalSonosTransport implements SonosTransport {
       throw new Error(`Live Sonos record for "${playerId}" is unavailable. Refresh discovery and try again.`);
     }
     return record;
+  }
+
+  private async getLivePlayerVolume(playerId: string): Promise<number> {
+    const player = this.requireLiveRecord(playerId);
+    return Math.max(0, Math.min(100, Math.round(await this.audioDevice(player.device).getVolume())));
+  }
+
+  private async setLivePlayerVolume(playerId: string, volume: number): Promise<void> {
+    const player = this.requireLiveRecord(playerId);
+    await player.device.setVolume(Math.max(0, Math.min(100, Math.round(volume))));
+  }
+
+  private async getLivePlayerMuted(playerId: string): Promise<boolean> {
+    const player = this.requireLiveRecord(playerId);
+    return await this.audioDevice(player.device).getMuted();
+  }
+
+  private async setLivePlayerMuted(playerId: string, muted: boolean): Promise<void> {
+    const player = this.requireLiveRecord(playerId);
+    await this.audioDevice(player.device).setMuted(muted);
   }
 
   private async findFavorite(householdId: string, favoriteId: string): Promise<SonosFavorite> {

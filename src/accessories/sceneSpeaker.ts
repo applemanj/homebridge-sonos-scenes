@@ -8,6 +8,7 @@ export class SceneSpeakerAccessory {
   private lastKnownVolume: number;
   private lastKnownActiveVolume: number;
   private lastKnownMuted = false;
+  private refreshInFlight?: Promise<void>;
 
   constructor(
     private readonly platform: SonosScenesPlatform,
@@ -36,6 +37,8 @@ export class SceneSpeakerAccessory {
     }
 
     this.service.setCharacteristic(this.platform.Characteristic.Name, this.displayNameFor(scene));
+    this.service.setCharacteristic(this.platform.Characteristic.On, this.isOn());
+    this.service.setCharacteristic(this.platform.Characteristic.Brightness, this.lastKnownVolume);
     this.service.getCharacteristic(this.platform.Characteristic.On)
       .onGet(this.handleOnGet.bind(this))
       .onSet(this.handleOnSet.bind(this));
@@ -66,22 +69,16 @@ export class SceneSpeakerAccessory {
     this.accessory.context.kind = "volume";
     this.accessory.displayName = this.displayNameFor(scene);
     this.service.setCharacteristic(this.platform.Characteristic.Name, this.displayNameFor(scene));
+    this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
+    this.service.updateCharacteristic(this.platform.Characteristic.Brightness, this.lastKnownVolume);
   }
 
   private displayNameFor(scene: SceneDefinition): string {
     return `${scene.name} Volume`;
   }
 
-  private async handleBrightnessGet(): Promise<CharacteristicValue> {
-    try {
-      this.lastKnownVolume = await this.platform.getSceneVolume(this.scene.id);
-      if (this.lastKnownVolume > 0) {
-        this.lastKnownActiveVolume = this.lastKnownVolume;
-      }
-    } catch {
-      void 0;
-    }
-
+  private handleBrightnessGet(): CharacteristicValue {
+    this.queueRefresh();
     return this.lastKnownVolume;
   }
 
@@ -97,27 +94,18 @@ export class SceneSpeakerAccessory {
         await this.platform.setSceneMuted(this.scene.id, false);
         this.lastKnownMuted = false;
       }
-      this.service.updateCharacteristic(this.platform.Characteristic.On, true);
+      this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
       return;
     }
 
     await this.platform.setSceneMuted(this.scene.id, true);
     this.lastKnownMuted = true;
-    this.service.updateCharacteristic(this.platform.Characteristic.On, false);
+    this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
   }
 
-  private async handleOnGet(): Promise<CharacteristicValue> {
-    try {
-      this.lastKnownMuted = await this.platform.getSceneMuted(this.scene.id);
-      this.lastKnownVolume = await this.platform.getSceneVolume(this.scene.id);
-      if (this.lastKnownVolume > 0) {
-        this.lastKnownActiveVolume = this.lastKnownVolume;
-      }
-    } catch {
-      void 0;
-    }
-
-    return !this.lastKnownMuted && this.lastKnownVolume > 0;
+  private handleOnGet(): CharacteristicValue {
+    this.queueRefresh();
+    return this.isOn();
   }
 
   private async handleOnSet(value: CharacteristicValue): Promise<void> {
@@ -131,7 +119,7 @@ export class SceneSpeakerAccessory {
       }
       await this.platform.setSceneMuted(this.scene.id, false);
       this.lastKnownMuted = false;
-      this.service.updateCharacteristic(this.platform.Characteristic.On, true);
+      this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
       return;
     }
 
@@ -140,6 +128,41 @@ export class SceneSpeakerAccessory {
     }
     await this.platform.setSceneMuted(this.scene.id, true);
     this.lastKnownMuted = true;
-    this.service.updateCharacteristic(this.platform.Characteristic.On, false);
+    this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
+  }
+
+  private isOn(): boolean {
+    return !this.lastKnownMuted && this.lastKnownVolume > 0;
+  }
+
+  private queueRefresh(): void {
+    if (this.refreshInFlight) {
+      return;
+    }
+
+    this.refreshInFlight = this.refreshFromPlatform()
+      .catch(() => undefined)
+      .finally(() => {
+        this.refreshInFlight = undefined;
+      });
+  }
+
+  private async refreshFromPlatform(): Promise<void> {
+    try {
+      const [muted, volume] = await Promise.all([
+        this.platform.getSceneMuted(this.scene.id),
+        this.platform.getSceneVolume(this.scene.id),
+      ]);
+
+      this.lastKnownMuted = muted;
+      this.lastKnownVolume = volume;
+      if (this.lastKnownVolume > 0) {
+        this.lastKnownActiveVolume = this.lastKnownVolume;
+      }
+      this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
+      this.service.updateCharacteristic(this.platform.Characteristic.Brightness, this.lastKnownVolume);
+    } catch {
+      void 0;
+    }
   }
 }
