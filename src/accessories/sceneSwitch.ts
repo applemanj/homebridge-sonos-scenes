@@ -48,6 +48,10 @@ export class SceneSwitchAccessory {
   private async handleOnSet(value: CharacteristicValue): Promise<void> {
     const nextState = value === true;
     if (nextState) {
+      this.clearAutoReset();
+      this.onState = true;
+      this.service.updateCharacteristic(this.platform.Characteristic.On, true);
+
       const result = await this.platform.runScene(this.scene.id, "on");
       if (!result.ok) {
         this.onState = false;
@@ -61,14 +65,18 @@ export class SceneSwitchAccessory {
       return;
     }
 
-    const result = await this.platform.runScene(this.scene.id, "off");
-    if (!result.ok) {
-      throw new Error(result.errors.join(" "));
-    }
-
     this.clearAutoReset();
     this.onState = false;
     this.service.updateCharacteristic(this.platform.Characteristic.On, false);
+
+    const result = await this.platform.runScene(this.scene.id, "off");
+    if (!result.ok) {
+      this.onState = true;
+      this.service.updateCharacteristic(this.platform.Characteristic.On, true);
+      throw new Error(result.errors.join(" "));
+    }
+
+    this.onState = false;
   }
 
   private armAutoReset(): void {

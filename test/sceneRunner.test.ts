@@ -71,6 +71,10 @@ class FakeTransport implements SonosTransport {
 
   async setPlayerMuted(): Promise<void> {}
 
+  async stopPlayback(_householdId: string, coordinatorPlayerId: string): Promise<void> {
+    this.calls.push(`stopPlayback:${coordinatorPlayerId}`);
+  }
+
   async ungroup(_householdId: string, coordinatorPlayerId: string, memberPlayerIds?: string[]): Promise<void> {
     this.calls.push(`ungroup:${coordinatorPlayerId}:${(memberPlayerIds ?? []).join(",")}`);
   }
@@ -142,5 +146,8 @@ test("SceneRunner executes the off ungroup action", async () => {
 
   const result = await runner.runOff(scene);
   assert.equal(result.ok, true);
-  assert.deepEqual(transport.calls, ["ungroup:RINCON_UPPER_LEVEL:RINCON_PRIMARY_BEDROOM"]);
+  assert.deepEqual(transport.calls, [
+    "stopPlayback:RINCON_UPPER_LEVEL",
+    "ungroup:RINCON_UPPER_LEVEL:RINCON_PRIMARY_BEDROOM",
+  ]);
 });

@@ -27,6 +27,7 @@ const fakeTransport: SonosTransport = {
   async setGroupMuted() {},
   async getPlayerMuted() { return false; },
   async setPlayerMuted() {},
+  async stopPlayback() {},
   async ungroup() {},
 };
 

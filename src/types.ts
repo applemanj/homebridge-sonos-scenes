@@ -205,6 +205,7 @@ export interface SonosTransport {
   setGroupMuted(householdId: string, coordinatorPlayerId: string, muted: boolean): Promise<void>;
   getPlayerMuted(householdId: string, playerId: string): Promise<boolean>;
   setPlayerMuted(householdId: string, playerId: string, muted: boolean): Promise<void>;
+  stopPlayback(householdId: string, coordinatorPlayerId: string): Promise<void>;
   ungroup(householdId: string, coordinatorPlayerId: string, memberPlayerIds?: string[]): Promise<void>;
   subscribe?(
     listener: (snapshot: TopologySnapshot) => void,

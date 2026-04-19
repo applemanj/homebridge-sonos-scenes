@@ -203,6 +203,11 @@ export class SceneRunner {
     }
 
     if (scene.offBehavior.kind === "ungroup") {
+      await this.withRetry(scene, "stop playback", () =>
+        this.transport.stopPlayback(scene.householdId, scene.coordinatorPlayerId),
+      );
+      log("info", `Stopped playback: ${scene.coordinatorPlayerId}`);
+
       await this.withRetry(scene, "ungroup members", () =>
         this.transport.ungroup(scene.householdId, scene.coordinatorPlayerId, scene.memberPlayerIds),
       );

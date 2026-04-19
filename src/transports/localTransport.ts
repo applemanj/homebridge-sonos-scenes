@@ -602,6 +602,24 @@ export class LocalSonosTransport implements SonosTransport {
     await this.setLivePlayerMuted(playerId, muted);
   }
 
+  async stopPlayback(householdId: string, coordinatorPlayerId: string): Promise<void> {
+    const snapshot = await this.discoverTopology();
+    const household = this.requireHousehold(snapshot, householdId);
+    const group = household.groups.find((item) => item.coordinatorId === coordinatorPlayerId)
+      ?? household.groups.find((item) => item.playerIds.includes(coordinatorPlayerId));
+
+    if (this.livePlayers.size === 0) {
+      if (group) {
+        group.playbackState = "PLAYBACK_STATE_IDLE";
+      }
+      this.touchFixture(householdId);
+      return;
+    }
+
+    const coordinator = this.requireLiveRecord(coordinatorPlayerId);
+    await coordinator.device.stop();
+  }
+
   async ungroup(householdId: string, coordinatorPlayerId: string, memberPlayerIds?: string[]): Promise<void> {
     const snapshot = await this.discoverTopology();
     const household = this.requireHousehold(snapshot, householdId);
