@@ -497,9 +497,7 @@ export class LocalSonosTransport implements SonosTransport {
       return;
     }
 
-    for (const playerId of group.playerIds) {
-      await this.setLivePlayerVolume(playerId, normalizedVolume);
-    }
+    await Promise.all(group.playerIds.map((playerId) => this.setLivePlayerVolume(playerId, normalizedVolume)));
   }
 
   async getGroupVolume(householdId: string, coordinatorPlayerId: string): Promise<number> {
@@ -579,9 +577,7 @@ export class LocalSonosTransport implements SonosTransport {
       return;
     }
 
-    for (const playerId of group.playerIds) {
-      await this.setLivePlayerMuted(playerId, muted);
-    }
+    await Promise.all(group.playerIds.map((playerId) => this.setLivePlayerMuted(playerId, muted)));
   }
 
   async getPlayerMuted(householdId: string, playerId: string): Promise<boolean> {

@@ -77,6 +77,12 @@ export class SceneSwitchAccessory {
       return;
     }
 
+    // When the scene has an explicit off action, keep the switch state stable
+    // so HomeKit can be used to trigger that off behavior manually.
+    if (this.scene.offBehavior.kind !== "none") {
+      return;
+    }
+
     this.resetTimer = setTimeout(() => {
       this.onState = false;
       this.service.updateCharacteristic(this.platform.Characteristic.On, false);
