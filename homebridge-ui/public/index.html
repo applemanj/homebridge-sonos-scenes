@@ -165,50 +165,6 @@
     grid-template-columns: minmax(280px, 1fr) minmax(360px, 2fr);
   }
 
-  .scene-workspace-grid {
-    display: grid;
-    gap: 1.25rem;
-    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
-    align-items: start;
-  }
-
-  .scene-subpanel {
-    display: grid;
-    gap: 0.9rem;
-    min-width: 0;
-  }
-
-  .scene-subpanel-header {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 0.75rem 1rem;
-  }
-
-  .scene-subpanel-copy {
-    display: grid;
-    gap: 0.35rem;
-    min-width: 0;
-    flex: 1 1 260px;
-  }
-
-  .scene-editor-frame {
-    padding-left: 1.2rem;
-    border-left: 1px solid rgba(22, 32, 51, 0.08);
-  }
-
-  .scene-editor-current {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.25rem 0.6rem;
-    border-radius: 999px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    background: rgba(10, 132, 255, 0.08);
-    color: #0a84ff;
-  }
-
   .scene-card {
     border-radius: 1rem;
     border: 1px solid rgba(22, 32, 51, 0.08);
@@ -225,20 +181,117 @@
     color: #556579;
   }
 
-  .scene-list button {
-    width: 100%;
-    text-align: left;
-    border-radius: 0.85rem;
-    padding: 0.75rem 0.9rem;
-    border: 1px solid rgba(22, 32, 51, 0.08);
-    background: white;
-    color: var(--scene-ink);
-    margin-bottom: 0.5rem;
+  .scene-accordion {
+    display: grid;
+    gap: 0.9rem;
   }
 
-  .scene-list button.active {
-    border-color: rgba(10, 132, 255, 0.45);
+  .scene-accordion-item {
+    border: 1px solid rgba(22, 32, 51, 0.08);
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, 0.92);
+    overflow: hidden;
+  }
+
+  .scene-accordion-item.active {
+    border-color: rgba(10, 132, 255, 0.42);
+    box-shadow: 0 10px 28px rgba(10, 132, 255, 0.08);
+  }
+
+  .scene-accordion-trigger {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--scene-ink);
+    text-align: left;
+    padding: 1rem 1.1rem;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.85rem;
+  }
+
+  .scene-accordion-trigger.active {
     background: rgba(10, 132, 255, 0.08);
+  }
+
+  .scene-accordion-copy {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .scene-accordion-copy strong,
+  .scene-accordion-copy .scene-help {
+    overflow-wrap: anywhere;
+  }
+
+  .scene-accordion-kicker {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: rgba(10, 132, 255, 0.08);
+    color: #0a84ff;
+  }
+
+  .scene-accordion-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    background: rgba(22, 32, 51, 0.06);
+    color: #556579;
+    font-size: 1rem;
+    line-height: 1;
+    flex: 0 0 auto;
+  }
+
+  .scene-accordion-body {
+    padding: 0 1.1rem 1.1rem;
+    border-top: 1px solid rgba(22, 32, 51, 0.08);
+    background: rgba(10, 132, 255, 0.03);
+  }
+
+  .scene-editor-detached {
+    display: none;
+  }
+
+  .scene-editor-shell {
+    display: grid;
+    gap: 1rem;
+    padding-top: 1rem;
+  }
+
+  .scene-editor-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.85rem 1rem;
+  }
+
+  .scene-editor-copy {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+    flex: 1 1 260px;
+  }
+
+  .scene-editor-current {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    background: rgba(10, 132, 255, 0.08);
+    color: #0a84ff;
   }
 
   .scene-badge {
@@ -575,17 +628,6 @@
     .scene-grid {
       grid-template-columns: 1fr;
     }
-
-    .scene-workspace-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .scene-editor-frame {
-      padding-left: 0;
-      padding-top: 1rem;
-      border-left: 0;
-      border-top: 1px solid rgba(22, 32, 51, 0.08);
-    }
   }
 </style>
 
@@ -718,31 +760,22 @@
     <div class="card-header scene-section-header">
       <div class="scene-section-header-copy">
         <strong>Scene Workspace</strong>
-        <div class="scene-help">Each saved scene becomes a HomeKit switch plus a companion volume control. Select a scene and edit it in the same workspace below.</div>
-        <div class="scene-inline-note mt-2">Save Scene Changes updates the selected scene here. Homebridge&apos;s footer Save button writes the full plugin config to disk.</div>
+        <div class="scene-help">Each saved scene becomes a HomeKit switch plus a companion volume control. Expand a scene below to edit its settings right under its header.</div>
+        <div class="scene-inline-note mt-2">Save Scene Changes updates just the open scene here. Homebridge&apos;s footer Save button writes the full plugin config to disk.</div>
       </div>
       <div class="scene-section-actions">
         <button class="btn btn-sm btn-outline-primary" id="new-scene-button" type="button">New Scene</button>
       </div>
     </div>
     <div class="card-body">
-      <div class="scene-workspace-grid">
-        <div class="scene-subpanel">
-          <div class="scene-subpanel-header">
-            <div class="scene-subpanel-copy">
-              <strong>Saved Scenes</strong>
-              <div class="scene-help">Pick a scene here to load its settings into the editor.</div>
-            </div>
-          </div>
-          <div id="scene-list" class="scene-list"></div>
-        </div>
-
-        <div class="scene-subpanel scene-editor-frame">
-          <div class="scene-subpanel-header">
-            <div class="scene-subpanel-copy">
-              <strong id="scene-editor-current" class="scene-editor-current">Editing: New Scene</strong>
+      <div id="scene-list" class="scene-accordion"></div>
+      <div id="scene-editor-parking" class="scene-editor-detached">
+        <div id="scene-editor-panel" class="scene-editor-shell">
+          <div class="scene-editor-header">
+            <div class="scene-editor-copy">
+              <strong id="scene-editor-current" class="scene-editor-current">Scene Settings: New Scene</strong>
               <div class="scene-help">Stable Sonos IDs are stored under the hood; the UI keeps room selection friendly.</div>
-              <div class="scene-inline-note">The selected scene from the list is what you are editing below.</div>
+              <div class="scene-inline-note">The expanded scene above is the one you are editing here.</div>
             </div>
             <div class="scene-section-actions">
               <button class="btn btn-sm btn-outline-danger" id="delete-scene-button" type="button">Delete</button>
@@ -921,6 +954,8 @@
 
     const elements = {
       sceneList: document.getElementById("scene-list"),
+      sceneEditorParking: document.getElementById("scene-editor-parking"),
+      sceneEditorPanel: document.getElementById("scene-editor-panel"),
       sceneEditorCurrent: document.getElementById("scene-editor-current"),
       sceneName: document.getElementById("scene-name"),
       sceneId: document.getElementById("scene-id"),
@@ -1053,7 +1088,14 @@
 
     function updateEditorHeading() {
       const name = (elements.sceneName?.value || state.draft?.name || "New Scene").trim() || "New Scene";
-      elements.sceneEditorCurrent.textContent = `Editing: ${name}`;
+      elements.sceneEditorCurrent.textContent = `Scene Settings: ${name}`;
+    }
+
+    function draftExistsInConfig() {
+      if (!state.draft?.id) {
+        return false;
+      }
+      return state.config.scenes.some((scene) => scene.id === state.draft.id);
     }
 
     function getActiveHousehold() {
@@ -1173,8 +1215,11 @@
     }
 
     function renderSceneList() {
+      elements.sceneEditorParking.appendChild(elements.sceneEditorPanel);
       elements.sceneList.innerHTML = "";
-      if (state.config.scenes.length === 0) {
+      const showDraftRow = Boolean(state.draft && !draftExistsInConfig());
+
+      if (state.config.scenes.length === 0 && !showDraftRow) {
         const empty = document.createElement("div");
         empty.className = "scene-help";
         empty.textContent = "No scenes saved yet. Create one from the editor.";
@@ -1182,23 +1227,52 @@
         return;
       }
 
-        state.config.scenes.forEach((scene) => {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = scene.id === state.activeSceneId ? "active" : "";
+      const renderSceneItem = (scene, options = {}) => {
+        const isActive = scene.id === state.activeSceneId;
+        const item = document.createElement("section");
+        item.className = `scene-accordion-item${isActive ? " active" : ""}`;
+
+        const trigger = document.createElement("button");
+        trigger.type = "button";
+        trigger.className = `scene-accordion-trigger${isActive ? " active" : ""}`;
         const coordinatorLabel = scene.coordinatorPlayerId
           ? ` - ${getPlayerNameForHousehold(scene.householdId, scene.coordinatorPlayerId)}`
           : "";
-          button.innerHTML = `<strong>${scene.name}</strong><div class="scene-help">${getHouseholdDisplayName(scene.householdId)}${coordinatorLabel}</div>`;
-          button.addEventListener("click", () => {
-            state.activeSceneId = scene.id;
-            state.draft = normalizeScene(scene);
-            resetVolumeUiFromDraft();
-            state.validation = null;
-            state.lastRun = null;
-            render();
-          });
-        elements.sceneList.appendChild(button);
+        const kicker = options.isDraft ? `<span class="scene-accordion-kicker">Unsaved Draft</span>` : "";
+        trigger.innerHTML = `
+          <div class="scene-accordion-copy">
+            ${kicker}
+            <strong>${scene.name}</strong>
+            <div class="scene-help">${getHouseholdDisplayName(scene.householdId)}${coordinatorLabel}</div>
+          </div>
+          <span class="scene-accordion-chevron" aria-hidden="true">${isActive ? "▾" : "▸"}</span>
+        `;
+        trigger.addEventListener("click", () => {
+          state.activeSceneId = scene.id;
+          state.draft = normalizeScene(scene);
+          resetVolumeUiFromDraft();
+          state.validation = null;
+          state.lastRun = null;
+          render();
+        });
+        item.appendChild(trigger);
+
+        if (isActive) {
+          const body = document.createElement("div");
+          body.className = "scene-accordion-body";
+          body.appendChild(elements.sceneEditorPanel);
+          item.appendChild(body);
+        }
+
+        elements.sceneList.appendChild(item);
+      };
+
+      if (showDraftRow) {
+        renderSceneItem(state.draft, { isDraft: true });
+      }
+
+      state.config.scenes.forEach((scene) => {
+        renderSceneItem(scene);
       });
     }
 
@@ -1558,6 +1632,7 @@
       elements.sceneName.value = state.draft.name || "";
       elements.sceneId.value = state.draft.id || "";
       updateEditorHeading();
+      elements.deleteSceneButton.textContent = draftExistsInConfig() ? "Delete" : "Discard Draft";
       renderHouseholdOptions();
       renderSourceControls();
       renderMemberOptions();
@@ -1656,6 +1731,15 @@
       if (!state.draft) {
         return;
       }
+      if (!draftExistsInConfig()) {
+        state.activeSceneId = state.config.scenes[0]?.id || null;
+        state.draft = state.config.scenes[0] ? normalizeScene(state.config.scenes[0]) : normalizeScene({});
+        resetVolumeUiFromDraft();
+        state.validation = null;
+        state.lastRun = null;
+        render();
+        return;
+      }
       state.config.scenes = state.config.scenes.filter((scene) => scene.id !== state.draft.id);
       state.activeSceneId = state.config.scenes[0]?.id || null;
       state.draft = state.config.scenes[0] ? normalizeScene(state.config.scenes[0]) : normalizeScene({});
@@ -1665,11 +1749,12 @@
     }
 
     function newScene() {
-      state.activeSceneId = null;
-      state.draft = normalizeScene({
+      const draft = normalizeScene({
         id: randomId(),
         householdId: state.topology?.households[0]?.id || state.config.defaultHouseholdId || "",
       });
+      state.activeSceneId = draft.id;
+      state.draft = draft;
       resetVolumeUiFromDraft();
       state.validation = null;
       state.lastRun = null;
