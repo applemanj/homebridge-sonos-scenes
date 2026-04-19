@@ -191,11 +191,14 @@
     border-radius: 1rem;
     background: rgba(255, 255, 255, 0.92);
     overflow: hidden;
+    position: relative;
   }
 
   .scene-accordion-item.active {
     border-color: rgba(10, 132, 255, 0.42);
     box-shadow: 0 10px 28px rgba(10, 132, 255, 0.08);
+    overflow: visible;
+    z-index: 2;
   }
 
   .scene-accordion-trigger {
@@ -898,7 +901,7 @@
                 <span>Off Behavior</span>
                 <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Off Behavior">
                   ?
-                  <span class="scene-tooltip">What should happen when you turn the HomeKit scene switch off. None leaves playback and grouping as they are. Ungroup stops the scene playback on the lead room and then splits the member rooms back out.</span>
+                  <span class="scene-tooltip">What should happen when you turn the HomeKit scene switch off. None leaves the scene running as it is. Ungroup stops playback and splits the member rooms back out.</span>
                 </span>
               </span>
             </label>
@@ -1209,7 +1212,6 @@
         return;
       }
       const scene = state.config.scenes[0] || normalizeScene({});
-      state.activeSceneId = scene.id;
       state.draft = normalizeScene(scene);
       resetVolumeUiFromDraft();
     }
@@ -1248,6 +1250,16 @@
           <span class="scene-accordion-chevron" aria-hidden="true">${isActive ? "▾" : "▸"}</span>
         `;
         trigger.addEventListener("click", () => {
+          if (state.activeSceneId === scene.id) {
+            state.activeSceneId = null;
+            state.draft = normalizeScene(scene);
+            resetVolumeUiFromDraft();
+            state.validation = null;
+            state.lastRun = null;
+            render();
+            return;
+          }
+
           state.activeSceneId = scene.id;
           state.draft = normalizeScene(scene);
           resetVolumeUiFromDraft();
@@ -1274,6 +1286,13 @@
       state.config.scenes.forEach((scene) => {
         renderSceneItem(scene);
       });
+
+      if (!state.activeSceneId && state.config.scenes.length > 0 && !showDraftRow) {
+        const note = document.createElement("div");
+        note.className = "scene-help";
+        note.textContent = "Select a scene to expand its settings.";
+        elements.sceneList.appendChild(note);
+      }
     }
 
     function renderCloudModeControls() {
@@ -1732,7 +1751,7 @@
         return;
       }
       if (!draftExistsInConfig()) {
-        state.activeSceneId = state.config.scenes[0]?.id || null;
+        state.activeSceneId = null;
         state.draft = state.config.scenes[0] ? normalizeScene(state.config.scenes[0]) : normalizeScene({});
         resetVolumeUiFromDraft();
         state.validation = null;
@@ -1741,7 +1760,7 @@
         return;
       }
       state.config.scenes = state.config.scenes.filter((scene) => scene.id !== state.draft.id);
-      state.activeSceneId = state.config.scenes[0]?.id || null;
+      state.activeSceneId = null;
       state.draft = state.config.scenes[0] ? normalizeScene(state.config.scenes[0]) : normalizeScene({});
       resetVolumeUiFromDraft();
       await persistConfig(true);
@@ -1916,7 +1935,7 @@
         state.config = normalizeConfig(pluginConfig[0]);
       }
 
-      state.activeSceneId = state.config.scenes[0]?.id || null;
+      state.activeSceneId = null;
       state.draft = state.config.scenes[0] ? normalizeScene(state.config.scenes[0]) : normalizeScene({});
       resetVolumeUiFromDraft();
       render();
