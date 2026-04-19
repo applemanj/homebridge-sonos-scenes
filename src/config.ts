@@ -352,7 +352,7 @@ export function validateSceneDefinition(
 
     if (scene.autoResetMs > 0 && scene.offBehavior.kind !== "none") {
       result.warnings.push(
-        "Auto Reset only flips the HomeKit switch back off visually. It does not run the scene's off behavior. Set Auto Reset to 0 if you want turning the switch off to trigger ungroup or other off actions.",
+        "Auto Reset is ignored while Off Behavior is enabled. The HomeKit switch will stay on until you turn it off manually, which is what triggers ungroup or other off actions.",
       );
     }
 

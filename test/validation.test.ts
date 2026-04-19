@@ -127,7 +127,7 @@ test("validateSceneDefinition rejects favorites the local transport cannot play"
   assert.match(validation.errors.join(" "), /not playable through the local transport/i);
 });
 
-test("validateSceneDefinition warns when auto reset hides off behavior", () => {
+test("validateSceneDefinition warns when auto reset is ignored by off behavior", () => {
   const validation = validateSceneDefinition(
     {
       id: "scene-auto-reset-warning",
@@ -154,5 +154,5 @@ test("validateSceneDefinition warns when auto reset hides off behavior", () => {
 
   assert.equal(validation.valid, true);
   assert.match(validation.warnings.join(" "), /auto reset/i);
-  assert.match(validation.warnings.join(" "), /does not run the scene's off behavior/i);
+  assert.match(validation.warnings.join(" "), /ignored while off behavior is enabled/i);
 });
