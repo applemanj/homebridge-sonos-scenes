@@ -92,10 +92,29 @@
     background: rgba(10, 132, 255, 0.06);
   }
 
+  .scene-mode-choice.disabled {
+    cursor: not-allowed;
+    border-style: dashed;
+    border-color: rgba(168, 85, 247, 0.26);
+    background: rgba(148, 163, 184, 0.06);
+  }
+
   .scene-mode-choice input {
     margin-right: 0.65rem;
     accent-color: var(--scene-accent);
     transform: scale(1.08);
+  }
+
+  .scene-mode-choice input:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .scene-mode-choice-header {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
   }
 
   .scene-mode-choice-title {
@@ -109,6 +128,24 @@
     font-size: 0.9rem;
     line-height: 1.45;
     margin-top: 0.35rem;
+  }
+
+  .scene-mode-choice.disabled .scene-mode-choice-title,
+  .scene-mode-choice.disabled .scene-mode-choice-copy {
+    color: #7a8798;
+  }
+
+  .scene-soon-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(168, 85, 247, 0.16);
+    color: #d946ef;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
   }
 
   .scene-cloud-settings {
@@ -678,17 +715,22 @@
           <span class="d-flex align-items-start">
             <input type="radio" name="cloud-mode" value="local_only">
             <span>
-              <span class="scene-mode-choice-title">Local Only</span>
+              <span class="scene-mode-choice-header">
+                <span class="scene-mode-choice-title">Local Only</span>
+              </span>
               <span class="scene-mode-choice-copy">Best for line-in, grouping, TV, and favorites that already work over the local Sonos path. No external broker required.</span>
             </span>
           </span>
         </label>
-        <label class="scene-mode-choice" data-mode-choice="local_plus_cloud">
+        <label class="scene-mode-choice disabled" data-mode-choice="local_plus_cloud" aria-disabled="true">
           <span class="d-flex align-items-start">
-            <input type="radio" name="cloud-mode" value="local_plus_cloud">
+            <input type="radio" name="cloud-mode" value="local_plus_cloud" disabled>
             <span>
-              <span class="scene-mode-choice-title">Local + Cloud</span>
-              <span class="scene-mode-choice-copy">Future-ready mode for self-hosters who run their own Sonos cloud broker to support favorites and playlists that are not reliable locally.</span>
+              <span class="scene-mode-choice-header">
+                <span class="scene-mode-choice-title">Local + Cloud</span>
+                <span class="scene-soon-tag">Coming Soon</span>
+              </span>
+              <span class="scene-mode-choice-copy">This mode is still in active development. Broker-backed favorites and playlists will land here once the cloud path is ready for broader testing.</span>
             </span>
           </span>
         </label>
@@ -1007,8 +1049,18 @@
       return JSON.parse(JSON.stringify(value));
     }
 
+    const LOCAL_PLUS_CLOUD_AVAILABLE = false;
+
+    function getEffectiveCloudMode(mode) {
+      if (!LOCAL_PLUS_CLOUD_AVAILABLE) {
+        return "local_only";
+      }
+      return mode === "local_plus_cloud" ? "local_plus_cloud" : "local_only";
+    }
+
     function normalizeConfig(config) {
       const safeConfig = config || {};
+      const cloudMode = getEffectiveCloudMode(safeConfig.cloud?.mode);
       return {
         platform: "SonosScenes",
         name: safeConfig.name || "Sonos Scenes",
@@ -1025,7 +1077,7 @@
           safeConfig.transport || {},
         ),
         cloud: {
-          mode: safeConfig.cloud?.mode === "local_plus_cloud" ? "local_plus_cloud" : "local_only",
+          mode: cloudMode,
           broker: Object.assign(
             {
               url: "",
@@ -1042,7 +1094,8 @@
     }
 
     function serializeCloudConfig() {
-      const mode = elements.cloudModeInputs.find((input) => input.checked)?.value || "local_only";
+      const requestedMode = elements.cloudModeInputs.find((input) => input.checked)?.value || "local_only";
+      const mode = getEffectiveCloudMode(requestedMode);
       state.config.cloud = {
         mode,
         broker: {
@@ -1307,22 +1360,30 @@
         },
       };
 
+      const mode = getEffectiveCloudMode(cloud.mode);
       elements.cloudModeInputs.forEach((input) => {
-        input.checked = input.value === cloud.mode;
+        if (input.value === "local_plus_cloud") {
+          input.disabled = !LOCAL_PLUS_CLOUD_AVAILABLE;
+        }
+        input.checked = input.value === mode;
       });
 
       elements.cloudModeChoices.forEach((choice) => {
-        choice.classList.toggle("active", choice.dataset.modeChoice === cloud.mode);
+        const isHybridChoice = choice.dataset.modeChoice === "local_plus_cloud";
+        choice.classList.toggle("disabled", isHybridChoice && !LOCAL_PLUS_CLOUD_AVAILABLE);
+        choice.classList.toggle("active", choice.dataset.modeChoice === mode);
       });
 
-      const isHybrid = cloud.mode === "local_plus_cloud";
+      const isHybrid = LOCAL_PLUS_CLOUD_AVAILABLE && mode === "local_plus_cloud";
       elements.cloudBrokerPanel.classList.toggle("scene-cloud-hidden", !isHybrid);
       elements.cloudBrokerCopy.textContent = isHybrid
         ? "Only needed if you run your own broker. The settings below stay with this plugin config and are ignored whenever Local Only is active."
         : "Only needed if you choose Local + Cloud and run your own broker service.";
       elements.cloudModeNote.textContent = isHybrid
         ? "Cloud-backed sources will stay opt-in. This plugin will keep local discovery, grouping, and line-in control on your Homebridge box."
-        : "Local Only is the simplest starting point. Switch to Local + Cloud only if you already run your own broker service.";
+        : LOCAL_PLUS_CLOUD_AVAILABLE
+          ? "Local Only is the simplest starting point. Switch to Local + Cloud only if you already run your own broker service."
+          : "Local Only is the current supported mode. Local + Cloud is coming soon once the broker flow is ready for broader testing.";
 
       elements.brokerUrl.value = cloud.broker?.url || "";
       elements.brokerApiKey.value = cloud.broker?.apiKey || "";
@@ -1337,7 +1398,14 @@
       const cloud = state.config.cloud;
       const status = state.brokerStatus;
 
-      if (cloud.mode !== "local_plus_cloud") {
+      const mode = getEffectiveCloudMode(cloud.mode);
+
+      if (!LOCAL_PLUS_CLOUD_AVAILABLE) {
+        elements.brokerStatusOutput.innerHTML = `<span class="scene-help">Cloud broker tools will appear here once Local + Cloud opens up for testing.</span>`;
+        return;
+      }
+
+      if (mode !== "local_plus_cloud") {
         elements.brokerStatusOutput.innerHTML = `<span class="scene-help">Broker checks will appear here after you switch to Local + Cloud.</span>`;
         return;
       }
