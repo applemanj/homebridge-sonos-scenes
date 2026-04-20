@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
   CloudBrokerConfig,
-  SonosCloudConfig,
   HouseholdSnapshot,
   LocalTransportConfig,
   SceneDefinition,
@@ -9,9 +8,16 @@ import type {
   SceneSource,
   SceneSourceKind,
   ScenesPlatformConfig,
+  SonosCloudConfig,
+  SonosPlayer,
   SonosTransport,
   TopologySnapshot,
   ValidationResult,
+  VirtualRoomChannel,
+  VirtualRoomDefinition,
+  VirtualRoomLastActiveBehavior,
+  VirtualRoomOffBehavior,
+  VirtualRoomOnBehavior,
 } from "./types";
 import { PLATFORM_NAME } from "./types";
 
@@ -45,16 +51,17 @@ export function createDefaultPlatformConfig(): ScenesPlatformConfig {
       broker: { ...DEFAULT_CLOUD.broker },
     },
     scenes: [],
+    virtualRooms: [],
   };
 }
 
-function slugify(value: string): string {
+function slugify(value: string, prefix: string): string {
   const slug = value
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
-  return slug || `scene-${randomUUID().slice(0, 8)}`;
+  return slug || `${prefix}-${randomUUID().slice(0, 8)}`;
 }
 
 function asNumber(value: unknown, fallback: number): number {
@@ -142,7 +149,7 @@ export function normalizeScene(scene: Partial<SceneDefinition>): SceneDefinition
   const sceneName = String(scene.name ?? "New Scene").trim() || "New Scene";
 
   return {
-    id: String(scene.id ?? "").trim() || slugify(sceneName),
+    id: String(scene.id ?? "").trim() || slugify(sceneName, "scene"),
     name: sceneName,
     householdId: String(scene.householdId ?? "").trim(),
     coordinatorPlayerId: String(scene.coordinatorPlayerId ?? "").trim(),
@@ -173,6 +180,61 @@ export function normalizeScene(scene: Partial<SceneDefinition>): SceneDefinition
     retryCount: Math.max(0, asNumber(scene.retryCount, 3)),
     retryDelayMs: Math.max(0, asNumber(scene.retryDelayMs, 750)),
     autoResetMs: Math.max(0, asNumber(scene.autoResetMs, 0)),
+  };
+}
+
+function normalizeVirtualRoomChannel(value: unknown): VirtualRoomChannel {
+  return value === "right" ? "right" : "left";
+}
+
+function normalizeVirtualRoomOnBehavior(value: unknown): VirtualRoomOnBehavior {
+  if (typeof value === "object" && value !== null && "kind" in value) {
+    const kind = (value as { kind?: string }).kind;
+    if (kind === "default_volume") {
+      return { kind: "default_volume" };
+    }
+  }
+
+  return { kind: "restore_last" };
+}
+
+function normalizeVirtualRoomOffBehavior(value: unknown): VirtualRoomOffBehavior {
+  if (typeof value === "object" && value !== null && "kind" in value) {
+    const kind = (value as { kind?: string }).kind;
+    if (kind === "volume_zero") {
+      return { kind: "volume_zero" };
+    }
+  }
+
+  return { kind: "mute" };
+}
+
+function normalizeVirtualRoomLastActiveBehavior(value: unknown): VirtualRoomLastActiveBehavior {
+  if (typeof value === "object" && value !== null && "kind" in value) {
+    const kind = (value as { kind?: string }).kind;
+    if (kind === "pause" || kind === "stop" || kind === "mute_master") {
+      return { kind };
+    }
+  }
+
+  return { kind: "none" };
+}
+
+export function normalizeVirtualRoom(room: Partial<VirtualRoomDefinition>): VirtualRoomDefinition {
+  const roomName = String(room.name ?? "New Virtual Room").trim() || "New Virtual Room";
+  const maxVolume = Math.max(0, Math.min(100, Math.round(asNumber(room.maxVolume, 100))));
+
+  return {
+    id: String(room.id ?? "").trim() || slugify(roomName, "virtual-room"),
+    name: roomName,
+    householdId: String(room.householdId ?? "").trim(),
+    ampPlayerId: String(room.ampPlayerId ?? "").trim(),
+    channel: normalizeVirtualRoomChannel(room.channel),
+    defaultVolume: Math.max(0, Math.min(100, Math.round(asNumber(room.defaultVolume, 30)))),
+    maxVolume,
+    onBehavior: normalizeVirtualRoomOnBehavior(room.onBehavior),
+    offBehavior: normalizeVirtualRoomOffBehavior(room.offBehavior),
+    lastActiveBehavior: normalizeVirtualRoomLastActiveBehavior(room.lastActiveBehavior),
   };
 }
 
@@ -218,6 +280,9 @@ export function normalizePlatformConfig(config: Partial<ScenesPlatformConfig> | 
     transport,
     cloud,
     scenes: Array.isArray(config?.scenes) ? config.scenes.map((scene) => normalizeScene(scene)) : [],
+    virtualRooms: Array.isArray(config?.virtualRooms)
+      ? config.virtualRooms.map((room) => normalizeVirtualRoom(room))
+      : [],
   };
 }
 
@@ -366,6 +431,111 @@ export function validateSceneDefinition(
       );
     }
   }
+
+  result.valid = result.errors.length === 0;
+  return result;
+}
+
+function playerLooksLikeAmp(player: SonosPlayer): boolean {
+  return /amp/i.test(player.model ?? "");
+}
+
+export function validateVirtualRoomDefinition(
+  roomInput: Partial<VirtualRoomDefinition>,
+  snapshot: TopologySnapshot,
+  siblingRoomInputs: Array<Partial<VirtualRoomDefinition>> = [],
+): ValidationResult {
+  const room = normalizeVirtualRoom(roomInput);
+  const siblingRooms = siblingRoomInputs.map((item) => normalizeVirtualRoom(item));
+  const result: ValidationResult = {
+    valid: true,
+    errors: [],
+    warnings: [],
+  };
+
+  if (!room.name.trim()) {
+    result.errors.push("Virtual room name is required.");
+  }
+
+  if (!room.householdId.trim()) {
+    result.errors.push("Household selection is required.");
+  }
+
+  if (!room.ampPlayerId.trim()) {
+    result.errors.push("Amp player selection is required.");
+  }
+
+  const household = findHousehold(snapshot, room.householdId);
+  if (!household) {
+    result.errors.push(`Household "${room.householdId}" was not found in the current topology.`);
+  }
+
+  if (room.defaultVolume > room.maxVolume) {
+    result.errors.push("Default volume cannot be greater than max volume.");
+  }
+
+  const ampSiblings = siblingRooms.filter((item) => item.ampPlayerId === room.ampPlayerId);
+  if (ampSiblings.some((item) => item.channel === room.channel)) {
+    result.errors.push(`Only one ${room.channel} virtual room can exist for amp "${room.ampPlayerId}".`);
+  }
+
+  if (ampSiblings.some((item) => item.householdId !== room.householdId)) {
+    result.errors.push("All virtual rooms for the same amp must belong to the same household.");
+  }
+
+  if (ampSiblings.some((item) => item.lastActiveBehavior.kind !== room.lastActiveBehavior.kind)) {
+    result.errors.push("All virtual rooms for the same amp must use the same last-active behavior.");
+  }
+
+  if (household) {
+    const player = household.players.find((item) => item.id === room.ampPlayerId);
+    if (!player) {
+      result.errors.push(`Amp player "${room.ampPlayerId}" was not found in "${household.displayName}".`);
+    } else {
+      if (!playerLooksLikeAmp(player)) {
+        result.warnings.push(
+          `${player.name} is modeled as "${player.model ?? "Unknown"}". Virtual rooms are currently intended for Sonos Amp-style channel-addressable devices.`,
+        );
+      }
+
+      if (player.fixedVolume) {
+        result.warnings.push(`${player.name} reports fixed volume, so virtual room volume control may not behave as expected.`);
+      }
+    }
+  }
+
+  result.valid = result.errors.length === 0;
+  return result;
+}
+
+export function validateVirtualRoomDefinitions(
+  roomInputs: Array<Partial<VirtualRoomDefinition>>,
+  snapshot: TopologySnapshot,
+): ValidationResult {
+  const rooms = roomInputs.map((item) => normalizeVirtualRoom(item));
+  const result: ValidationResult = {
+    valid: true,
+    errors: [],
+    warnings: [],
+  };
+  const seenIds = new Set<string>();
+
+  for (const room of rooms) {
+    if (seenIds.has(room.id)) {
+      result.errors.push(`Virtual room ids must be unique. Duplicate id: "${room.id}".`);
+      continue;
+    }
+    seenIds.add(room.id);
+  }
+
+  rooms.forEach((room, index) => {
+    const siblings = rooms.filter((_, siblingIndex) => siblingIndex !== index);
+    const validation = validateVirtualRoomDefinition(room, snapshot, siblings);
+    const label = room.name || room.id || `Virtual Room ${index + 1}`;
+
+    result.errors.push(...validation.errors.map((message) => `${label}: ${message}`));
+    result.warnings.push(...validation.warnings.map((message) => `${label}: ${message}`));
+  });
 
   result.valid = result.errors.length === 0;
   return result;

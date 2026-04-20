@@ -7,6 +7,7 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 export type SceneSourceKind = "favorite" | "line_in" | "tv";
 export type SceneTrigger = "on" | "off" | "test";
 export type CloudControlMode = "local_only" | "local_plus_cloud";
+export type VirtualRoomChannel = "left" | "right";
 
 export interface FavoriteSource {
   kind: "favorite";
@@ -45,6 +46,52 @@ export interface OffBehaviorUngroup {
 
 export type SceneOffBehavior = OffBehaviorNone | OffBehaviorUngroup;
 
+export interface VirtualRoomOnBehaviorRestoreLast {
+  kind: "restore_last";
+}
+
+export interface VirtualRoomOnBehaviorDefaultVolume {
+  kind: "default_volume";
+}
+
+export type VirtualRoomOnBehavior =
+  | VirtualRoomOnBehaviorRestoreLast
+  | VirtualRoomOnBehaviorDefaultVolume;
+
+export interface VirtualRoomOffBehaviorMute {
+  kind: "mute";
+}
+
+export interface VirtualRoomOffBehaviorVolumeZero {
+  kind: "volume_zero";
+}
+
+export type VirtualRoomOffBehavior =
+  | VirtualRoomOffBehaviorMute
+  | VirtualRoomOffBehaviorVolumeZero;
+
+export interface VirtualRoomLastActiveBehaviorNone {
+  kind: "none";
+}
+
+export interface VirtualRoomLastActiveBehaviorPause {
+  kind: "pause";
+}
+
+export interface VirtualRoomLastActiveBehaviorStop {
+  kind: "stop";
+}
+
+export interface VirtualRoomLastActiveBehaviorMuteMaster {
+  kind: "mute_master";
+}
+
+export type VirtualRoomLastActiveBehavior =
+  | VirtualRoomLastActiveBehaviorNone
+  | VirtualRoomLastActiveBehaviorPause
+  | VirtualRoomLastActiveBehaviorStop
+  | VirtualRoomLastActiveBehaviorMuteMaster;
+
 export interface SceneDefinition {
   id: string;
   name: string;
@@ -59,6 +106,19 @@ export interface SceneDefinition {
   retryCount: number;
   retryDelayMs: number;
   autoResetMs: number;
+}
+
+export interface VirtualRoomDefinition {
+  id: string;
+  name: string;
+  householdId: string;
+  ampPlayerId: string;
+  channel: VirtualRoomChannel;
+  defaultVolume: number;
+  maxVolume: number;
+  onBehavior: VirtualRoomOnBehavior;
+  offBehavior: VirtualRoomOffBehavior;
+  lastActiveBehavior: VirtualRoomLastActiveBehavior;
 }
 
 export interface LocalTransportConfig {
@@ -91,6 +151,7 @@ export interface ScenesPlatformConfig extends PlatformConfig {
   transport: LocalTransportConfig;
   cloud: SonosCloudConfig;
   scenes: SceneDefinition[];
+  virtualRooms: VirtualRoomDefinition[];
 }
 
 export interface SonosHouseholdSummary {
@@ -162,6 +223,12 @@ export interface SceneRunResult {
   snapshot?: TopologySnapshot;
 }
 
+export interface VirtualRoomState {
+  volume: number;
+  muted: boolean;
+  on: boolean;
+}
+
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
@@ -201,10 +268,25 @@ export interface SonosTransport {
   setGroupVolume(householdId: string, coordinatorPlayerId: string, volume: number): Promise<void>;
   getPlayerVolume(householdId: string, playerId: string): Promise<number>;
   setPlayerVolume(householdId: string, playerId: string, volume: number): Promise<void>;
+  getPlayerChannelVolume(householdId: string, playerId: string, channel: VirtualRoomChannel): Promise<number>;
+  setPlayerChannelVolume(
+    householdId: string,
+    playerId: string,
+    channel: VirtualRoomChannel,
+    volume: number,
+  ): Promise<void>;
   getGroupMuted(householdId: string, coordinatorPlayerId: string): Promise<boolean>;
   setGroupMuted(householdId: string, coordinatorPlayerId: string, muted: boolean): Promise<void>;
   getPlayerMuted(householdId: string, playerId: string): Promise<boolean>;
   setPlayerMuted(householdId: string, playerId: string, muted: boolean): Promise<void>;
+  getPlayerChannelMuted(householdId: string, playerId: string, channel: VirtualRoomChannel): Promise<boolean>;
+  setPlayerChannelMuted(
+    householdId: string,
+    playerId: string,
+    channel: VirtualRoomChannel,
+    muted: boolean,
+  ): Promise<void>;
+  pausePlayback(householdId: string, coordinatorPlayerId: string): Promise<void>;
   stopPlayback(householdId: string, coordinatorPlayerId: string): Promise<void>;
   ungroup(householdId: string, coordinatorPlayerId: string, memberPlayerIds?: string[]): Promise<void>;
   subscribe?(

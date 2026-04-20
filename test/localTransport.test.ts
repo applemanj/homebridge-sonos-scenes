@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildFavoriteTransportUri, parseFavoriteBrowseXml } from "../src/transports/localTransport";
+import { buildFavoriteTransportUri, LocalSonosTransport, parseFavoriteBrowseXml } from "../src/transports/localTransport";
 
 const rawFavoriteBrowseXml = `
   <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">
@@ -53,4 +53,48 @@ test("buildFavoriteTransportUri derives container URIs for shortcut favorites", 
   );
   assert.equal(shortcutFavorite.transportUri, "x-rincon-cpcontainer:10052064artist%3a1314005644");
   assert.match(shortcutFavorite.metadata ?? "", /object\.container\.person\.musicArtist/);
+});
+
+test("LocalSonosTransport tracks channel volume and mute separately in fixture mode", async () => {
+  const transport = new LocalSonosTransport({
+    kind: "local",
+    enableLiveDiscovery: false,
+    discoveryTimeoutMs: 2500,
+    requestTimeoutMs: 5000,
+    allowTvSource: false,
+  });
+
+  assert.equal(await transport.getPlayerVolume("local-household", "RINCON_UPPER_LEVEL"), 0);
+  assert.equal(await transport.getPlayerChannelVolume("local-household", "RINCON_UPPER_LEVEL", "left"), 0);
+
+  await transport.setPlayerVolume("local-household", "RINCON_UPPER_LEVEL", 27);
+  await transport.setPlayerChannelVolume("local-household", "RINCON_UPPER_LEVEL", "left", 31);
+  await transport.setPlayerChannelMuted("local-household", "RINCON_UPPER_LEVEL", "left", true);
+
+  assert.equal(await transport.getPlayerVolume("local-household", "RINCON_UPPER_LEVEL"), 27);
+  assert.equal(await transport.getPlayerMuted("local-household", "RINCON_UPPER_LEVEL"), false);
+  assert.equal(await transport.getPlayerChannelVolume("local-household", "RINCON_UPPER_LEVEL", "left"), 31);
+  assert.equal(await transport.getPlayerChannelVolume("local-household", "RINCON_UPPER_LEVEL", "right"), 0);
+  assert.equal(await transport.getPlayerChannelMuted("local-household", "RINCON_UPPER_LEVEL", "left"), true);
+  assert.equal(await transport.getPlayerChannelMuted("local-household", "RINCON_UPPER_LEVEL", "right"), false);
+});
+
+test("LocalSonosTransport updates fixture playback state for pause and stop", async () => {
+  const transport = new LocalSonosTransport({
+    kind: "local",
+    enableLiveDiscovery: false,
+    discoveryTimeoutMs: 2500,
+    requestTimeoutMs: 5000,
+    allowTvSource: false,
+  });
+
+  await transport.pausePlayback("local-household", "RINCON_UPPER_LEVEL");
+  let snapshot = await transport.discoverTopology();
+  let group = snapshot.households[0].groups.find((item) => item.coordinatorId === "RINCON_UPPER_LEVEL");
+  assert.equal(group?.playbackState, "PLAYBACK_STATE_PAUSED_PLAYBACK");
+
+  await transport.stopPlayback("local-household", "RINCON_UPPER_LEVEL");
+  snapshot = await transport.discoverTopology();
+  group = snapshot.households[0].groups.find((item) => item.coordinatorId === "RINCON_UPPER_LEVEL");
+  assert.equal(group?.playbackState, "PLAYBACK_STATE_IDLE");
 });

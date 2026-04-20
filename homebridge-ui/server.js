@@ -18,6 +18,7 @@ class UiServer extends HomebridgePluginUiServer {
     this.onRequest("/defaults", this.handleDefaults.bind(this));
     this.onRequest("/discover", this.handleDiscover.bind(this));
     this.onRequest("/validate-scene", this.handleValidateScene.bind(this));
+    this.onRequest("/validate-virtual-room", this.handleValidateVirtualRoom.bind(this));
     this.onRequest("/run-test", this.handleRunTest.bind(this));
     this.onRequest("/broker-status", this.handleBrokerStatus.bind(this));
 
@@ -41,6 +42,18 @@ class UiServer extends HomebridgePluginUiServer {
       return await this.serverApi.validateSceneForUi(payload.config, payload.scene ?? {});
     } catch (error) {
       throw this.asRequestError(error, "Validation failed");
+    }
+  }
+
+  async handleValidateVirtualRoom(payload = {}) {
+    try {
+      return await this.serverApi.validateVirtualRoomForUi(
+        payload.config,
+        payload.virtualRoom ?? {},
+        Array.isArray(payload.siblings) ? payload.siblings : [],
+      );
+    } catch (error) {
+      throw this.asRequestError(error, "Virtual room validation failed");
     }
   }
 

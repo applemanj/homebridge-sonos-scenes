@@ -67,3 +67,28 @@ test("normalizePlatformConfig preserves future self-hosted broker settings", () 
   assert.equal(config.cloud.broker.routeFavorites, true);
   assert.equal(config.cloud.broker.routePlaylists, false);
 });
+
+test("normalizePlatformConfig normalizes virtual room defaults", () => {
+  const config = normalizePlatformConfig({
+    virtualRooms: [
+      {
+        name: "Primary Bedroom Ceiling",
+        householdId: "local-household",
+        ampPlayerId: "RINCON_AMP_UPSTAIRS",
+        channel: "right",
+        defaultVolume: 42,
+        onBehavior: {
+          kind: "default_volume",
+        },
+      } as any,
+    ],
+  });
+
+  assert.equal(config.virtualRooms.length, 1);
+  assert.equal(config.virtualRooms[0].id, "primary-bedroom-ceiling");
+  assert.equal(config.virtualRooms[0].channel, "right");
+  assert.equal(config.virtualRooms[0].defaultVolume, 42);
+  assert.equal(config.virtualRooms[0].maxVolume, 100);
+  assert.equal(config.virtualRooms[0].offBehavior.kind, "mute");
+  assert.equal(config.virtualRooms[0].lastActiveBehavior.kind, "none");
+});

@@ -116,6 +116,7 @@ Open issues here:
 If you want the more technical details, use these docs:
 
 - [Architecture and Developer Notes](docs/architecture.md)
+- [Virtual Rooms Draft](docs/virtual-rooms.md)
 - [Cloud Broker Contract](docs/cloud-broker.md)
 - [Self-Hosted Broker Scaffold](broker/README.md)
 - [Example Config](examples/config.example.json)

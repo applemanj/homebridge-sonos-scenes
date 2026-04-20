@@ -124,6 +124,98 @@
           "type": "object"
         },
         "default": []
+      },
+      "virtualRooms": {
+        "title": "Virtual Rooms",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "householdId": {
+              "title": "Household Id",
+              "type": "string"
+            },
+            "ampPlayerId": {
+              "title": "Amp Player Id",
+              "type": "string"
+            },
+            "channel": {
+              "title": "Channel",
+              "type": "string",
+              "default": "left",
+              "oneOf": [
+                "left",
+                "right"
+              ]
+            },
+            "defaultVolume": {
+              "title": "Default Volume",
+              "type": "integer",
+              "default": 30
+            },
+            "maxVolume": {
+              "title": "Max Volume",
+              "type": "integer",
+              "default": 100
+            },
+            "onBehavior": {
+              "title": "On Behavior",
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "title": "Kind",
+                  "type": "string",
+                  "default": "restore_last",
+                  "oneOf": [
+                    "restore_last",
+                    "default_volume"
+                  ]
+                }
+              }
+            },
+            "offBehavior": {
+              "title": "Off Behavior",
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "title": "Kind",
+                  "type": "string",
+                  "default": "mute",
+                  "oneOf": [
+                    "mute",
+                    "volume_zero"
+                  ]
+                }
+              }
+            },
+            "lastActiveBehavior": {
+              "title": "Last Active Behavior",
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "title": "Kind",
+                  "type": "string",
+                  "default": "none",
+                  "oneOf": [
+                    "none",
+                    "pause",
+                    "stop",
+                    "mute_master"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "default": []
       }
     }
   }

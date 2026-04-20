@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateSceneDefinition } from "../src/config";
+import { validateSceneDefinition, validateVirtualRoomDefinition, validateVirtualRoomDefinitions } from "../src/config";
 import { sampleTopology } from "../src/sampleTopology";
-import type { SceneSourceKind, SonosTransport } from "../src/types";
+import type { SceneSourceKind, SonosTransport, VirtualRoomChannel } from "../src/types";
 
 const fakeTransport: SonosTransport = {
   kind: "fake",
@@ -23,10 +23,15 @@ const fakeTransport: SonosTransport = {
   async setGroupVolume() {},
   async getPlayerVolume() { return 0; },
   async setPlayerVolume() {},
+  async getPlayerChannelVolume(_householdId: string, _playerId: string, _channel: VirtualRoomChannel) { return 0; },
+  async setPlayerChannelVolume() {},
   async getGroupMuted() { return false; },
   async setGroupMuted() {},
   async getPlayerMuted() { return false; },
   async setPlayerMuted() {},
+  async getPlayerChannelMuted(_householdId: string, _playerId: string, _channel: VirtualRoomChannel) { return false; },
+  async setPlayerChannelMuted() {},
+  async pausePlayback() {},
   async stopPlayback() {},
   async ungroup() {},
 };
@@ -156,4 +161,127 @@ test("validateSceneDefinition warns when auto reset is ignored by off behavior",
   assert.equal(validation.valid, true);
   assert.match(validation.warnings.join(" "), /auto reset/i);
   assert.match(validation.warnings.join(" "), /ignored while off behavior is enabled/i);
+});
+
+test("validateVirtualRoomDefinition rejects duplicate channels on the same amp", () => {
+  const validation = validateVirtualRoomDefinition(
+    {
+      id: "primary-bedroom-ceiling",
+      name: "Primary Bedroom Ceiling",
+      householdId: "local-household",
+      ampPlayerId: "RINCON_UPPER_LEVEL",
+      channel: "left",
+      defaultVolume: 60,
+      maxVolume: 50,
+      onBehavior: {
+        kind: "restore_last",
+      },
+      offBehavior: {
+        kind: "mute",
+      },
+      lastActiveBehavior: {
+        kind: "pause",
+      },
+    },
+    sampleTopology,
+    [
+      {
+        id: "primary-bathroom-ceiling",
+        name: "Primary Bathroom Ceiling",
+        householdId: "local-household",
+        ampPlayerId: "RINCON_UPPER_LEVEL",
+        channel: "left",
+        defaultVolume: 20,
+        maxVolume: 40,
+        onBehavior: {
+          kind: "restore_last",
+        },
+        offBehavior: {
+          kind: "mute",
+        },
+        lastActiveBehavior: {
+          kind: "pause",
+        },
+      },
+    ],
+  );
+
+  assert.equal(validation.valid, false);
+  assert.match(validation.errors.join(" "), /only one left virtual room/i);
+  assert.match(validation.errors.join(" "), /default volume cannot be greater than max volume/i);
+});
+
+test("validateVirtualRoomDefinition warns when the selected player is not an amp", () => {
+  const validation = validateVirtualRoomDefinition(
+    {
+      id: "beam-room",
+      name: "Beam Room",
+      householdId: "local-household",
+      ampPlayerId: "RINCON_PRIMARY_BEDROOM",
+      channel: "right",
+      defaultVolume: 25,
+      maxVolume: 50,
+      onBehavior: {
+        kind: "restore_last",
+      },
+      offBehavior: {
+        kind: "mute",
+      },
+      lastActiveBehavior: {
+        kind: "none",
+      },
+    },
+    sampleTopology,
+  );
+
+  assert.equal(validation.valid, true);
+  assert.match(validation.warnings.join(" "), /intended for Sonos Amp/i);
+});
+
+test("validateVirtualRoomDefinitions rejects duplicate ids and mixed last-active policies", () => {
+  const validation = validateVirtualRoomDefinitions(
+    [
+      {
+        id: "upstairs-amp-left",
+        name: "Bedroom Ceiling",
+        householdId: "local-household",
+        ampPlayerId: "RINCON_UPPER_LEVEL",
+        channel: "left",
+        defaultVolume: 25,
+        maxVolume: 50,
+        onBehavior: {
+          kind: "restore_last",
+        },
+        offBehavior: {
+          kind: "mute",
+        },
+        lastActiveBehavior: {
+          kind: "pause",
+        },
+      },
+      {
+        id: "upstairs-amp-left",
+        name: "Bathroom Ceiling",
+        householdId: "local-household",
+        ampPlayerId: "RINCON_UPPER_LEVEL",
+        channel: "right",
+        defaultVolume: 25,
+        maxVolume: 50,
+        onBehavior: {
+          kind: "restore_last",
+        },
+        offBehavior: {
+          kind: "mute",
+        },
+        lastActiveBehavior: {
+          kind: "none",
+        },
+      },
+    ],
+    sampleTopology,
+  );
+
+  assert.equal(validation.valid, false);
+  assert.match(validation.errors.join(" "), /duplicate id/i);
+  assert.match(validation.errors.join(" "), /same amp must use the same last-active behavior/i);
 });

@@ -959,6 +959,167 @@
   </section>
 
   <section class="card scene-card">
+    <div class="card-header scene-section-header">
+      <div class="scene-section-header-copy">
+        <strong>Virtual Room Workspace</strong>
+        <div class="scene-help">Build left and right channel accessories for a shared Sonos Amp so each side can appear as its own controllable room in HomeKit.</div>
+        <div class="scene-inline-note mt-2">Virtual rooms share one playback source. This editor is for per-side on/off, channel volume, and last-room-off behavior.</div>
+      </div>
+      <div class="scene-section-actions">
+        <button class="btn btn-sm btn-outline-primary" id="new-virtual-room-button" type="button">New Virtual Room</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div id="virtual-room-list" class="scene-accordion"></div>
+      <div id="virtual-room-editor-parking" class="scene-editor-detached">
+        <div id="virtual-room-editor-panel" class="scene-editor-shell">
+          <div class="scene-editor-header">
+            <div class="scene-editor-copy">
+              <strong id="virtual-room-editor-current" class="scene-editor-current">Virtual Room Settings: New Virtual Room</strong>
+              <div class="scene-help">Pick one Amp, choose left or right, then define how that side should behave when HomeKit turns it on or off.</div>
+              <div class="scene-inline-note">The expanded virtual room above is the one you are editing here.</div>
+            </div>
+            <div class="scene-section-actions">
+              <button class="btn btn-sm btn-outline-primary" id="validate-virtual-room-button" type="button">Validate Virtual Room</button>
+              <button class="btn btn-sm btn-outline-danger" id="delete-virtual-room-button" type="button">Delete</button>
+              <button class="btn btn-sm btn-primary" id="save-virtual-room-button" type="button">Save Virtual Room Changes</button>
+            </div>
+          </div>
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label" for="virtual-room-name">
+                <span class="scene-label-row">
+                  <span>Virtual Room Name</span>
+                  <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Virtual Room Name">
+                    ?
+                    <span class="scene-tooltip">The friendly name shown for this channel-backed accessory in HomeKit, such as "Primary Bathroom Ceiling".</span>
+                  </span>
+                </span>
+              </label>
+              <input class="form-control" id="virtual-room-name" type="text">
+            </div>
+            <input id="virtual-room-id" type="hidden">
+            <div class="col-md-6">
+              <label class="form-label" for="virtual-room-household-select">
+                <span class="scene-label-row">
+                  <span>Household</span>
+                  <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Virtual Room Household">
+                    ?
+                    <span class="scene-tooltip">The Sonos household that contains the Amp you want to split into virtual rooms.</span>
+                  </span>
+                </span>
+              </label>
+              <select class="form-select" id="virtual-room-household-select"></select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="virtual-room-amp-player-select">
+                <span class="scene-label-row">
+                  <span>Amp Player</span>
+                  <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Amp Player">
+                    ?
+                    <span class="scene-tooltip">Choose the Sonos player that owns the left and right speaker outputs. Sonos Amp is the intended target.</span>
+                  </span>
+                </span>
+              </label>
+              <select class="form-select" id="virtual-room-amp-player-select"></select>
+              <div id="virtual-room-amp-note" class="scene-inline-note mt-2">Choose an Amp-like player to target left and right channels.</div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="virtual-room-channel">
+                <span class="scene-label-row">
+                  <span>Channel</span>
+                  <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Channel">
+                    ?
+                    <span class="scene-tooltip">The physical output side this virtual room controls. Left and right can each become their own HomeKit accessory.</span>
+                  </span>
+                </span>
+              </label>
+              <select class="form-select" id="virtual-room-channel">
+                <option value="left">Left</option>
+                <option value="right">Right</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="virtual-room-default-volume">
+                <span class="scene-label-row">
+                  <span>Default Volume</span>
+                  <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Default Volume">
+                    ?
+                    <span class="scene-tooltip">The fallback channel volume to use when this side turns on and there is no previous active value to restore.</span>
+                  </span>
+                </span>
+              </label>
+              <input class="form-control" id="virtual-room-default-volume" type="number" min="0" max="100">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="virtual-room-max-volume">
+                <span class="scene-label-row">
+                  <span>Max Volume</span>
+                  <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Max Volume">
+                    ?
+                    <span class="scene-tooltip">A safety cap for this virtual room so that one side of the Amp cannot be pushed above this level from HomeKit.</span>
+                  </span>
+                </span>
+              </label>
+              <input class="form-control" id="virtual-room-max-volume" type="number" min="0" max="100">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="virtual-room-on-behavior">
+                <span class="scene-label-row">
+                  <span>On Behavior</span>
+                  <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain On Behavior">
+                    ?
+                    <span class="scene-tooltip">Choose whether the virtual room restores its last active channel volume or always starts from the configured default volume.</span>
+                  </span>
+                </span>
+              </label>
+              <select class="form-select" id="virtual-room-on-behavior">
+                <option value="restore_last">Restore Last</option>
+                <option value="default_volume">Use Default Volume</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="virtual-room-off-behavior">
+                <span class="scene-label-row">
+                  <span>Off Behavior</span>
+                  <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Virtual Room Off Behavior">
+                    ?
+                    <span class="scene-tooltip">Choose whether turning this virtual room off mutes just that channel or drives that channel volume to zero.</span>
+                  </span>
+                </span>
+              </label>
+              <select class="form-select" id="virtual-room-off-behavior">
+                <option value="mute">Mute Channel</option>
+                <option value="volume_zero">Set Channel Volume To Zero</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="virtual-room-last-active-behavior">
+                <span class="scene-label-row">
+                  <span>Last Active Behavior</span>
+                  <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Last Active Behavior">
+                    ?
+                    <span class="scene-tooltip">What to do if this side is turned off and no other virtual room on the same Amp is still active.</span>
+                  </span>
+                </span>
+              </label>
+              <select class="form-select" id="virtual-room-last-active-behavior">
+                <option value="none">None</option>
+                <option value="pause">Pause Playback</option>
+                <option value="stop">Stop Playback</option>
+                <option value="mute_master">Mute Master</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <div id="virtual-room-validation-output"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card scene-card">
     <div class="card-header">
       <strong>Discovery Snapshot</strong>
       <div class="scene-help">The editor updates its available coordinators, members, favorites, and inputs from this topology.</div>
@@ -987,12 +1148,15 @@
       config: null,
       topology: null,
       draft: null,
+      virtualRoomDraft: null,
       volumeUi: {
         coordinatorEnabled: false,
         memberEnabled: {},
       },
       activeSceneId: null,
+      activeVirtualRoomId: null,
       validation: null,
+      virtualRoomValidation: null,
       lastRun: null,
       brokerStatus: null,
     };
@@ -1036,6 +1200,26 @@
       saveSceneButton: document.getElementById("save-scene-button"),
       deleteSceneButton: document.getElementById("delete-scene-button"),
       newSceneButton: document.getElementById("new-scene-button"),
+      virtualRoomList: document.getElementById("virtual-room-list"),
+      virtualRoomEditorParking: document.getElementById("virtual-room-editor-parking"),
+      virtualRoomEditorPanel: document.getElementById("virtual-room-editor-panel"),
+      virtualRoomEditorCurrent: document.getElementById("virtual-room-editor-current"),
+      virtualRoomName: document.getElementById("virtual-room-name"),
+      virtualRoomId: document.getElementById("virtual-room-id"),
+      virtualRoomHouseholdSelect: document.getElementById("virtual-room-household-select"),
+      virtualRoomAmpPlayerSelect: document.getElementById("virtual-room-amp-player-select"),
+      virtualRoomAmpNote: document.getElementById("virtual-room-amp-note"),
+      virtualRoomChannel: document.getElementById("virtual-room-channel"),
+      virtualRoomDefaultVolume: document.getElementById("virtual-room-default-volume"),
+      virtualRoomMaxVolume: document.getElementById("virtual-room-max-volume"),
+      virtualRoomOnBehavior: document.getElementById("virtual-room-on-behavior"),
+      virtualRoomOffBehavior: document.getElementById("virtual-room-off-behavior"),
+      virtualRoomLastActiveBehavior: document.getElementById("virtual-room-last-active-behavior"),
+      virtualRoomValidationOutput: document.getElementById("virtual-room-validation-output"),
+      validateVirtualRoomButton: document.getElementById("validate-virtual-room-button"),
+      saveVirtualRoomButton: document.getElementById("save-virtual-room-button"),
+      deleteVirtualRoomButton: document.getElementById("delete-virtual-room-button"),
+      newVirtualRoomButton: document.getElementById("new-virtual-room-button"),
     };
 
     function randomId() {
@@ -1090,6 +1274,7 @@
           ),
         },
         scenes: Array.isArray(safeConfig.scenes) ? safeConfig.scenes.map(normalizeScene) : [],
+        virtualRooms: Array.isArray(safeConfig.virtualRooms) ? safeConfig.virtualRooms.map(normalizeVirtualRoom) : [],
       };
     }
 
@@ -1131,6 +1316,23 @@
         };
       }
 
+    function normalizeVirtualRoom(room) {
+      const safeRoom = room || {};
+      const normalizeBehavior = (value, allowed, fallback) => allowed.includes(value?.kind) ? { kind: value.kind } : { kind: fallback };
+      return {
+        id: safeRoom.id || randomId(),
+        name: safeRoom.name || "New Virtual Room",
+        householdId: safeRoom.householdId || "",
+        ampPlayerId: safeRoom.ampPlayerId || "",
+        channel: safeRoom.channel === "right" ? "right" : "left",
+        defaultVolume: Number.isFinite(Number(safeRoom.defaultVolume)) ? Math.max(0, Math.min(100, Number(safeRoom.defaultVolume))) : 30,
+        maxVolume: Number.isFinite(Number(safeRoom.maxVolume)) ? Math.max(0, Math.min(100, Number(safeRoom.maxVolume))) : 100,
+        onBehavior: normalizeBehavior(safeRoom.onBehavior, ["restore_last", "default_volume"], "restore_last"),
+        offBehavior: normalizeBehavior(safeRoom.offBehavior, ["mute", "volume_zero"], "mute"),
+        lastActiveBehavior: normalizeBehavior(safeRoom.lastActiveBehavior, ["none", "pause", "stop", "mute_master"], "none"),
+      };
+    }
+
     function resetVolumeUiFromDraft() {
       const memberEnabled = {};
       for (const entry of state.draft?.playerVolumes || []) {
@@ -1147,6 +1349,11 @@
       elements.sceneEditorCurrent.textContent = `Scene Settings: ${name}`;
     }
 
+    function updateVirtualRoomEditorHeading() {
+      const name = (elements.virtualRoomName?.value || state.virtualRoomDraft?.name || "New Virtual Room").trim() || "New Virtual Room";
+      elements.virtualRoomEditorCurrent.textContent = `Virtual Room Settings: ${name}`;
+    }
+
     function draftExistsInConfig() {
       if (!state.draft?.id) {
         return false;
@@ -1154,11 +1361,25 @@
       return state.config.scenes.some((scene) => scene.id === state.draft.id);
     }
 
+    function virtualRoomDraftExistsInConfig() {
+      if (!state.virtualRoomDraft?.id) {
+        return false;
+      }
+      return state.config.virtualRooms.some((room) => room.id === state.virtualRoomDraft.id);
+    }
+
     function getActiveHousehold() {
       if (!state.topology) {
         return null;
       }
       return state.topology.households.find((household) => household.id === state.draft.householdId) || state.topology.households[0] || null;
+    }
+
+    function getActiveVirtualRoomHousehold() {
+      if (!state.topology) {
+        return null;
+      }
+      return state.topology.households.find((household) => household.id === state.virtualRoomDraft.householdId) || state.topology.households[0] || null;
     }
 
     function getPlayerName(playerId) {
@@ -1178,6 +1399,17 @@
 
       const household = state.topology?.households?.find((entry) => entry.id === householdId);
       return household?.displayName || householdId;
+    }
+
+    function looksLikeAmpPlayer(player) {
+      return /amp/i.test(player?.model || "");
+    }
+
+    function getPlayerDisplayLabel(player) {
+      if (!player) {
+        return "Unknown player";
+      }
+      return `${player.name}${player.model ? ` (${player.model})` : ""}`;
     }
 
     function getPlayableFavorites(household) {
@@ -1240,6 +1472,22 @@
         }));
       state.draft = normalizeScene(draft);
       return clone(state.draft);
+    }
+
+    function serializeVirtualRoomDraft() {
+      serializeCloudConfig();
+      const draft = clone(state.virtualRoomDraft);
+      draft.name = elements.virtualRoomName.value.trim() || "New Virtual Room";
+      draft.householdId = elements.virtualRoomHouseholdSelect.value;
+      draft.ampPlayerId = elements.virtualRoomAmpPlayerSelect.value;
+      draft.channel = elements.virtualRoomChannel.value === "right" ? "right" : "left";
+      draft.defaultVolume = Number(elements.virtualRoomDefaultVolume.value || 0);
+      draft.maxVolume = Number(elements.virtualRoomMaxVolume.value || 0);
+      draft.onBehavior = { kind: elements.virtualRoomOnBehavior.value };
+      draft.offBehavior = { kind: elements.virtualRoomOffBehavior.value };
+      draft.lastActiveBehavior = { kind: elements.virtualRoomLastActiveBehavior.value };
+      state.virtualRoomDraft = normalizeVirtualRoom(draft);
+      return clone(state.virtualRoomDraft);
     }
 
     function buildSourcePayload() {
@@ -1348,6 +1596,89 @@
       }
     }
 
+    function ensureVirtualRoomDraft() {
+      if (state.virtualRoomDraft) {
+        return;
+      }
+      const room = state.config.virtualRooms[0] || normalizeVirtualRoom({});
+      state.virtualRoomDraft = normalizeVirtualRoom(room);
+    }
+
+    function renderVirtualRoomList() {
+      elements.virtualRoomEditorParking.appendChild(elements.virtualRoomEditorPanel);
+      elements.virtualRoomList.innerHTML = "";
+      const showDraftRow = Boolean(state.virtualRoomDraft && !virtualRoomDraftExistsInConfig());
+
+      if (state.config.virtualRooms.length === 0 && !showDraftRow) {
+        const empty = document.createElement("div");
+        empty.className = "scene-help";
+        empty.textContent = "No virtual rooms saved yet. Create one to expose the left or right side of an Amp.";
+        elements.virtualRoomList.appendChild(empty);
+        return;
+      }
+
+      const renderVirtualRoomItem = (room, options = {}) => {
+        const isActive = room.id === state.activeVirtualRoomId;
+        const item = document.createElement("section");
+        item.className = `scene-accordion-item${isActive ? " active" : ""}`;
+
+        const trigger = document.createElement("button");
+        trigger.type = "button";
+        trigger.className = `scene-accordion-trigger${isActive ? " active" : ""}`;
+        const ampName = room.ampPlayerId
+          ? getPlayerNameForHousehold(room.householdId, room.ampPlayerId)
+          : "No Amp selected";
+        const kicker = options.isDraft ? `<span class="scene-accordion-kicker">Unsaved Draft</span>` : "";
+        trigger.innerHTML = `
+          <div class="scene-accordion-copy">
+            ${kicker}
+            <strong>${room.name}</strong>
+            <div class="scene-help">${getHouseholdDisplayName(room.householdId)} - ${ampName} - ${room.channel === "right" ? "Right Channel" : "Left Channel"}</div>
+          </div>
+          <span class="scene-accordion-chevron" aria-hidden="true">${isActive ? "â–¾" : "â–¸"}</span>
+        `;
+        trigger.addEventListener("click", () => {
+          if (state.activeVirtualRoomId === room.id) {
+            state.activeVirtualRoomId = null;
+            state.virtualRoomDraft = normalizeVirtualRoom(room);
+            state.virtualRoomValidation = null;
+            render();
+            return;
+          }
+
+          state.activeVirtualRoomId = room.id;
+          state.virtualRoomDraft = normalizeVirtualRoom(room);
+          state.virtualRoomValidation = null;
+          render();
+        });
+        item.appendChild(trigger);
+
+        if (isActive) {
+          const body = document.createElement("div");
+          body.className = "scene-accordion-body";
+          body.appendChild(elements.virtualRoomEditorPanel);
+          item.appendChild(body);
+        }
+
+        elements.virtualRoomList.appendChild(item);
+      };
+
+      if (showDraftRow) {
+        renderVirtualRoomItem(state.virtualRoomDraft, { isDraft: true });
+      }
+
+      state.config.virtualRooms.forEach((room) => {
+        renderVirtualRoomItem(room);
+      });
+
+      if (!state.activeVirtualRoomId && state.config.virtualRooms.length > 0 && !showDraftRow) {
+        const note = document.createElement("div");
+        note.className = "scene-help";
+        note.textContent = "Select a virtual room to expand its settings.";
+        elements.virtualRoomList.appendChild(note);
+      }
+    }
+
     function renderCloudModeControls() {
       const cloud = state.config.cloud || {
         mode: "local_only",
@@ -1397,9 +1728,7 @@
     function renderBrokerStatus() {
       const cloud = state.config.cloud;
       const status = state.brokerStatus;
-
       const mode = getEffectiveCloudMode(cloud.mode);
-
       if (!LOCAL_PLUS_CLOUD_AVAILABLE) {
         elements.brokerStatusOutput.innerHTML = `<span class="scene-help">Cloud broker tools will appear here once Local + Cloud opens up for testing.</span>`;
         return;
@@ -1450,6 +1779,54 @@
       elements.householdSelect.innerHTML = households
         .map((household) => `<option value="${household.id}" ${household.id === currentId ? "selected" : ""}>${household.displayName}</option>`)
         .join("");
+    }
+
+    function renderVirtualRoomHouseholdOptions() {
+      const households = state.topology?.households || [];
+      const currentId = state.virtualRoomDraft.householdId || state.config.defaultHouseholdId || households[0]?.id || "";
+      state.virtualRoomDraft.householdId = currentId;
+      elements.virtualRoomHouseholdSelect.innerHTML = households
+        .map((household) => `<option value="${household.id}" ${household.id === currentId ? "selected" : ""}>${household.displayName}</option>`)
+        .join("");
+    }
+
+    function renderVirtualRoomAmpOptions() {
+      const household = getActiveVirtualRoomHousehold();
+      const players = household?.players || [];
+      const sortedPlayers = players.slice().sort((left, right) => {
+        const ampDelta = Number(looksLikeAmpPlayer(right)) - Number(looksLikeAmpPlayer(left));
+        if (ampDelta !== 0) {
+          return ampDelta;
+        }
+        return (left.name || "").localeCompare(right.name || "");
+      });
+
+      const currentPlayerId = sortedPlayers.some((player) => player.id === state.virtualRoomDraft.ampPlayerId)
+        ? state.virtualRoomDraft.ampPlayerId
+        : (sortedPlayers.find((player) => looksLikeAmpPlayer(player)) || sortedPlayers[0])?.id || "";
+      state.virtualRoomDraft.ampPlayerId = currentPlayerId;
+
+      elements.virtualRoomAmpPlayerSelect.innerHTML = sortedPlayers.length > 0
+        ? sortedPlayers
+            .map((player) => {
+              const ampTag = looksLikeAmpPlayer(player) ? " - Recommended" : "";
+              return `<option value="${player.id}" ${player.id === currentPlayerId ? "selected" : ""}>${getPlayerDisplayLabel(player)}${ampTag}</option>`;
+            })
+            .join("")
+        : `<option value="">No players available</option>`;
+
+      const selectedPlayer = sortedPlayers.find((player) => player.id === currentPlayerId);
+      if (!selectedPlayer) {
+        elements.virtualRoomAmpNote.innerHTML = `<span class="scene-help">No discovered players are available in this household yet. Run Discover first.</span>`;
+        return;
+      }
+
+      if (looksLikeAmpPlayer(selectedPlayer)) {
+        elements.virtualRoomAmpNote.innerHTML = `<span class="scene-status-pill success">Amp Ready</span> <span class="scene-help">${getPlayerDisplayLabel(selectedPlayer)} looks like a good virtual-room target.</span>`;
+        return;
+      }
+
+      elements.virtualRoomAmpNote.innerHTML = `<span class="scene-status-pill pending">Non-Amp</span> <span class="scene-help">${getPlayerDisplayLabel(selectedPlayer)} is not modeled as a Sonos Amp. You can still save it, but left/right channel control is intended for Amp-style outputs.</span>`;
     }
 
     function renderMemberOptions() {
@@ -1636,6 +2013,23 @@
       elements.validationOutput.innerHTML = sections.join("");
     }
 
+    function renderVirtualRoomValidation() {
+      if (!state.virtualRoomValidation) {
+        elements.virtualRoomValidationOutput.innerHTML = `<div class="scene-help">Run virtual room validation to check the selected household, Amp target, channel pairing, and behavior rules.</div>`;
+        return;
+      }
+
+      elements.virtualRoomValidationOutput.innerHTML = `
+        <div class="mb-3">
+          <span class="badge ${state.virtualRoomValidation.validation.valid ? "bg-success" : "bg-danger"}">
+            ${state.virtualRoomValidation.validation.valid ? "Valid" : "Needs Attention"}
+          </span>
+        </div>
+        ${renderMessageList("Errors", state.virtualRoomValidation.validation.errors, "danger")}
+        ${renderMessageList("Warnings", state.virtualRoomValidation.validation.warnings, "warning")}
+      `;
+    }
+
     function renderMessageList(title, messages, tone) {
       if (!messages || messages.length === 0) {
         return "";
@@ -1730,19 +2124,38 @@
       elements.offBehavior.value = state.draft.offBehavior?.kind || "none";
     }
 
+    function renderVirtualRoomInputs() {
+      elements.virtualRoomName.value = state.virtualRoomDraft.name || "";
+      elements.virtualRoomId.value = state.virtualRoomDraft.id || "";
+      updateVirtualRoomEditorHeading();
+      elements.deleteVirtualRoomButton.textContent = virtualRoomDraftExistsInConfig() ? "Delete" : "Discard Draft";
+      renderVirtualRoomHouseholdOptions();
+      renderVirtualRoomAmpOptions();
+      elements.virtualRoomChannel.value = state.virtualRoomDraft.channel || "left";
+      elements.virtualRoomDefaultVolume.value = state.virtualRoomDraft.defaultVolume ?? 30;
+      elements.virtualRoomMaxVolume.value = state.virtualRoomDraft.maxVolume ?? 100;
+      elements.virtualRoomOnBehavior.value = state.virtualRoomDraft.onBehavior?.kind || "restore_last";
+      elements.virtualRoomOffBehavior.value = state.virtualRoomDraft.offBehavior?.kind || "mute";
+      elements.virtualRoomLastActiveBehavior.value = state.virtualRoomDraft.lastActiveBehavior?.kind || "none";
+      renderVirtualRoomValidation();
+    }
+
     function render() {
       ensureDraft();
+      ensureVirtualRoomDraft();
       renderSceneList();
+      renderVirtualRoomList();
       renderInputs();
+      renderVirtualRoomInputs();
       renderValidation();
       renderLogs();
       renderDiscovery();
     }
 
-    async function persistConfig(showToast) {
+    async function persistConfig(showToast, message) {
       await homebridge.updatePluginConfig([clone(state.config)]);
       if (showToast) {
-        homebridge.toast.success("Scene changes saved here. Use Homebridge's Save button below to write them to config.json.");
+        homebridge.toast.success(message || "Changes saved here. Use Homebridge's Save button below to write them to config.json.");
       }
     }
 
@@ -1760,6 +2173,9 @@
         state.topology = result.snapshot;
         if (!state.draft.householdId && state.topology.households[0]) {
           state.draft.householdId = state.config.defaultHouseholdId || state.topology.households[0].id;
+        }
+        if (!state.virtualRoomDraft.householdId && state.topology.households[0]) {
+          state.virtualRoomDraft.householdId = state.config.defaultHouseholdId || state.topology.households[0].id;
         }
         render();
       } catch (error) {
@@ -1780,6 +2196,23 @@
         render();
       } catch (error) {
         homebridge.toast.error(error.message || "Validation failed.");
+      } finally {
+        homebridge.hideSpinner();
+      }
+    }
+
+    async function validateVirtualRoomDraft() {
+      serializeVirtualRoomDraft();
+      homebridge.showSpinner();
+      try {
+        state.virtualRoomValidation = await homebridge.request("/validate-virtual-room", {
+          config: state.config,
+          virtualRoom: state.virtualRoomDraft,
+          siblings: state.config.virtualRooms.filter((room) => room.id !== state.virtualRoomDraft.id),
+        });
+        renderVirtualRoomValidation();
+      } catch (error) {
+        homebridge.toast.error(error.message || "Virtual room validation failed.");
       } finally {
         homebridge.hideSpinner();
       }
@@ -1810,7 +2243,20 @@
         state.config.scenes.push(draft);
       }
       state.activeSceneId = draft.id;
-      await persistConfig(true);
+      await persistConfig(true, "Scene changes saved here. Use Homebridge's Save button below to write them to config.json.");
+      render();
+    }
+
+    async function saveVirtualRoom() {
+      const draft = serializeVirtualRoomDraft();
+      const index = state.config.virtualRooms.findIndex((room) => room.id === draft.id);
+      if (index >= 0) {
+        state.config.virtualRooms[index] = draft;
+      } else {
+        state.config.virtualRooms.push(draft);
+      }
+      state.activeVirtualRoomId = draft.id;
+      await persistConfig(true, "Virtual room changes saved here. Use Homebridge's Save button below to write them to config.json.");
       render();
     }
 
@@ -1835,6 +2281,25 @@
       render();
     }
 
+    async function deleteVirtualRoom() {
+      if (!state.virtualRoomDraft) {
+        return;
+      }
+      if (!virtualRoomDraftExistsInConfig()) {
+        state.activeVirtualRoomId = null;
+        state.virtualRoomDraft = state.config.virtualRooms[0] ? normalizeVirtualRoom(state.config.virtualRooms[0]) : normalizeVirtualRoom({});
+        state.virtualRoomValidation = null;
+        render();
+        return;
+      }
+      state.config.virtualRooms = state.config.virtualRooms.filter((room) => room.id !== state.virtualRoomDraft.id);
+      state.activeVirtualRoomId = null;
+      state.virtualRoomDraft = state.config.virtualRooms[0] ? normalizeVirtualRoom(state.config.virtualRooms[0]) : normalizeVirtualRoom({});
+      state.virtualRoomValidation = null;
+      await persistConfig(true, "Virtual room changes saved here. Use Homebridge's Save button below to write them to config.json.");
+      render();
+    }
+
     function newScene() {
       const draft = normalizeScene({
         id: randomId(),
@@ -1845,6 +2310,17 @@
       resetVolumeUiFromDraft();
       state.validation = null;
       state.lastRun = null;
+      render();
+    }
+
+    function newVirtualRoom() {
+      const draft = normalizeVirtualRoom({
+        id: randomId(),
+        householdId: state.topology?.households[0]?.id || state.config.defaultHouseholdId || "",
+      });
+      state.activeVirtualRoomId = draft.id;
+      state.virtualRoomDraft = draft;
+      state.virtualRoomValidation = null;
       render();
     }
 
@@ -1881,6 +2357,10 @@
       elements.saveSceneButton.addEventListener("click", saveScene);
       elements.deleteSceneButton.addEventListener("click", deleteScene);
       elements.newSceneButton.addEventListener("click", newScene);
+      elements.validateVirtualRoomButton.addEventListener("click", validateVirtualRoomDraft);
+      elements.saveVirtualRoomButton.addEventListener("click", saveVirtualRoom);
+      elements.deleteVirtualRoomButton.addEventListener("click", deleteVirtualRoom);
+      elements.newVirtualRoomButton.addEventListener("click", newVirtualRoom);
       elements.checkBrokerButton.addEventListener("click", checkBroker);
 
       elements.cloudModeInputs.forEach((input) => {
@@ -1955,12 +2435,14 @@
       });
 
       elements.sceneName.addEventListener("input", updateEditorHeading);
+      elements.virtualRoomName.addEventListener("input", updateVirtualRoomEditorHeading);
 
       elements.householdSelect.addEventListener("change", () => {
         serializeDraft();
         state.draft.coordinatorPlayerId = "";
         state.draft.memberPlayerIds = [];
         state.draft.playerVolumes = [];
+        state.validation = null;
         render();
       });
 
@@ -1969,12 +2451,39 @@
         state.draft.source = elements.sourceKind.value === "favorite"
           ? { kind: "favorite", favoriteId: "" }
           : { kind: elements.sourceKind.value, deviceId: "", playOnCompletion: true };
+        state.validation = null;
         render();
       });
 
       elements.sourceTarget.addEventListener("change", () => {
         serializeDraft();
+        state.validation = null;
         render();
+      });
+
+      [
+        elements.virtualRoomHouseholdSelect,
+        elements.virtualRoomAmpPlayerSelect,
+        elements.virtualRoomChannel,
+        elements.virtualRoomDefaultVolume,
+        elements.virtualRoomMaxVolume,
+        elements.virtualRoomOnBehavior,
+        elements.virtualRoomOffBehavior,
+        elements.virtualRoomLastActiveBehavior,
+      ].forEach((element) => {
+        element.addEventListener("change", () => {
+          serializeVirtualRoomDraft();
+          state.virtualRoomValidation = null;
+          if (element === elements.virtualRoomHouseholdSelect) {
+            state.virtualRoomDraft.ampPlayerId = "";
+            render();
+            return;
+          }
+          if (element === elements.virtualRoomAmpPlayerSelect || element === elements.virtualRoomHouseholdSelect) {
+            renderVirtualRoomAmpOptions();
+          }
+          renderVirtualRoomInputs();
+        });
       });
 
       homebridge.addEventListener("scene-test-result", (event) => {
@@ -1986,6 +2495,7 @@
         const schemaConfig = normalizeConfig(event.data);
         state.config = Object.assign({}, state.config, schemaConfig, {
           scenes: state.config.scenes,
+          virtualRooms: state.config.virtualRooms,
         });
         state.brokerStatus = null;
       });
@@ -2004,7 +2514,11 @@
       }
 
       state.activeSceneId = null;
+      state.activeVirtualRoomId = null;
       state.draft = state.config.scenes[0] ? normalizeScene(state.config.scenes[0]) : normalizeScene({});
+      state.virtualRoomDraft = state.config.virtualRooms[0]
+        ? normalizeVirtualRoom(state.config.virtualRooms[0])
+        : normalizeVirtualRoom({});
       resetVolumeUiFromDraft();
       render();
       await discover();
