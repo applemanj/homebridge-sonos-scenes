@@ -1368,6 +1368,10 @@
       return state.config.virtualRooms.some((room) => room.id === state.virtualRoomDraft.id);
     }
 
+    function getAccordionChevronMarkup(isActive) {
+      return isActive ? "&#9662;" : "&#9656;";
+    }
+
     function getActiveHousehold() {
       if (!state.topology) {
         return null;
@@ -1475,6 +1479,9 @@
     }
 
     function serializeVirtualRoomDraft() {
+      if (!state.virtualRoomDraft) {
+        return null;
+      }
       serializeCloudConfig();
       const draft = clone(state.virtualRoomDraft);
       draft.name = elements.virtualRoomName.value.trim() || "New Virtual Room";
@@ -1548,7 +1555,7 @@
             <strong>${scene.name}</strong>
             <div class="scene-help">${getHouseholdDisplayName(scene.householdId)}${coordinatorLabel}</div>
           </div>
-          <span class="scene-accordion-chevron" aria-hidden="true">${isActive ? "▾" : "▸"}</span>
+          <span class="scene-accordion-chevron" aria-hidden="true">${getAccordionChevronMarkup(isActive)}</span>
         `;
         trigger.addEventListener("click", () => {
           if (state.activeSceneId === scene.id) {
@@ -1596,14 +1603,6 @@
       }
     }
 
-    function ensureVirtualRoomDraft() {
-      if (state.virtualRoomDraft) {
-        return;
-      }
-      const room = state.config.virtualRooms[0] || normalizeVirtualRoom({});
-      state.virtualRoomDraft = normalizeVirtualRoom(room);
-    }
-
     function renderVirtualRoomList() {
       elements.virtualRoomEditorParking.appendChild(elements.virtualRoomEditorPanel);
       elements.virtualRoomList.innerHTML = "";
@@ -1612,7 +1611,7 @@
       if (state.config.virtualRooms.length === 0 && !showDraftRow) {
         const empty = document.createElement("div");
         empty.className = "scene-help";
-        empty.textContent = "No virtual rooms saved yet. Create one to expose the left or right side of an Amp.";
+        empty.textContent = "No virtual rooms configured. Most systems can leave this section empty unless you want to split a Sonos Amp into separate left and right HomeKit accessories.";
         elements.virtualRoomList.appendChild(empty);
         return;
       }
@@ -1635,7 +1634,7 @@
             <strong>${room.name}</strong>
             <div class="scene-help">${getHouseholdDisplayName(room.householdId)} - ${ampName} - ${room.channel === "right" ? "Right Channel" : "Left Channel"}</div>
           </div>
-          <span class="scene-accordion-chevron" aria-hidden="true">${isActive ? "â–¾" : "â–¸"}</span>
+          <span class="scene-accordion-chevron" aria-hidden="true">${getAccordionChevronMarkup(isActive)}</span>
         `;
         trigger.addEventListener("click", () => {
           if (state.activeVirtualRoomId === room.id) {
@@ -2125,6 +2124,12 @@
     }
 
     function renderVirtualRoomInputs() {
+      if (!state.virtualRoomDraft) {
+        elements.virtualRoomEditorCurrent.textContent = "Virtual Room Settings";
+        elements.virtualRoomValidationOutput.innerHTML = `<div class="scene-help">Create or expand a virtual room to edit its settings here.</div>`;
+        return;
+      }
+
       elements.virtualRoomName.value = state.virtualRoomDraft.name || "";
       elements.virtualRoomId.value = state.virtualRoomDraft.id || "";
       updateVirtualRoomEditorHeading();
@@ -2142,7 +2147,6 @@
 
     function render() {
       ensureDraft();
-      ensureVirtualRoomDraft();
       renderSceneList();
       renderVirtualRoomList();
       renderInputs();
@@ -2174,7 +2178,7 @@
         if (!state.draft.householdId && state.topology.households[0]) {
           state.draft.householdId = state.config.defaultHouseholdId || state.topology.households[0].id;
         }
-        if (!state.virtualRoomDraft.householdId && state.topology.households[0]) {
+        if (state.virtualRoomDraft && !state.virtualRoomDraft.householdId && state.topology.households[0]) {
           state.virtualRoomDraft.householdId = state.config.defaultHouseholdId || state.topology.households[0].id;
         }
         render();
@@ -2202,6 +2206,10 @@
     }
 
     async function validateVirtualRoomDraft() {
+      if (!state.virtualRoomDraft) {
+        homebridge.toast.error("Create or open a virtual room first.");
+        return;
+      }
       serializeVirtualRoomDraft();
       homebridge.showSpinner();
       try {
@@ -2248,6 +2256,10 @@
     }
 
     async function saveVirtualRoom() {
+      if (!state.virtualRoomDraft) {
+        homebridge.toast.error("Create a virtual room first.");
+        return;
+      }
       const draft = serializeVirtualRoomDraft();
       const index = state.config.virtualRooms.findIndex((room) => room.id === draft.id);
       if (index >= 0) {
@@ -2287,14 +2299,14 @@
       }
       if (!virtualRoomDraftExistsInConfig()) {
         state.activeVirtualRoomId = null;
-        state.virtualRoomDraft = state.config.virtualRooms[0] ? normalizeVirtualRoom(state.config.virtualRooms[0]) : normalizeVirtualRoom({});
+        state.virtualRoomDraft = null;
         state.virtualRoomValidation = null;
         render();
         return;
       }
       state.config.virtualRooms = state.config.virtualRooms.filter((room) => room.id !== state.virtualRoomDraft.id);
       state.activeVirtualRoomId = null;
-      state.virtualRoomDraft = state.config.virtualRooms[0] ? normalizeVirtualRoom(state.config.virtualRooms[0]) : normalizeVirtualRoom({});
+      state.virtualRoomDraft = null;
       state.virtualRoomValidation = null;
       await persistConfig(true, "Virtual room changes saved here. Use Homebridge's Save button below to write them to config.json.");
       render();
@@ -2516,9 +2528,7 @@
       state.activeSceneId = null;
       state.activeVirtualRoomId = null;
       state.draft = state.config.scenes[0] ? normalizeScene(state.config.scenes[0]) : normalizeScene({});
-      state.virtualRoomDraft = state.config.virtualRooms[0]
-        ? normalizeVirtualRoom(state.config.virtualRooms[0])
-        : normalizeVirtualRoom({});
+      state.virtualRoomDraft = null;
       resetVolumeUiFromDraft();
       render();
       await discover();
