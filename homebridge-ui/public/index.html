@@ -1501,8 +1501,38 @@
       return state.config.virtualRooms.some((room) => roomIds.includes(room.id));
     }
 
-    function getAccordionChevronMarkup(isActive) {
-      return isActive ? "&#9662;" : "&#9656;";
+    function getAccordionChevronText(isActive) {
+      return isActive ? "\u25be" : "\u25b8";
+    }
+
+    function buildAccordionTriggerContent({ title, helpLines = [], isDraft = false, isActive = false }) {
+      const copy = document.createElement("div");
+      copy.className = "scene-accordion-copy";
+
+      if (isDraft) {
+        const kicker = document.createElement("span");
+        kicker.className = "scene-accordion-kicker";
+        kicker.textContent = "Unsaved Draft";
+        copy.appendChild(kicker);
+      }
+
+      const heading = document.createElement("strong");
+      heading.textContent = title;
+      copy.appendChild(heading);
+
+      helpLines.filter(Boolean).forEach((line) => {
+        const help = document.createElement("div");
+        help.className = "scene-help";
+        help.textContent = line;
+        copy.appendChild(help);
+      });
+
+      const chevron = document.createElement("span");
+      chevron.className = "scene-accordion-chevron";
+      chevron.setAttribute("aria-hidden", "true");
+      chevron.textContent = getAccordionChevronText(isActive);
+
+      return { copy, chevron };
     }
 
     function getActiveHousehold() {
@@ -1687,15 +1717,14 @@
         const coordinatorLabel = scene.coordinatorPlayerId
           ? ` - ${getPlayerNameForHousehold(scene.householdId, scene.coordinatorPlayerId)}`
           : "";
-        const kicker = options.isDraft ? `<span class="scene-accordion-kicker">Unsaved Draft</span>` : "";
-        trigger.innerHTML = `
-          <div class="scene-accordion-copy">
-            ${kicker}
-            <strong>${scene.name}</strong>
-            <div class="scene-help">${getHouseholdDisplayName(scene.householdId)}${coordinatorLabel}</div>
-          </div>
-          <span class="scene-accordion-chevron" aria-hidden="true">${getAccordionChevronMarkup(isActive)}</span>
-        `;
+        const triggerContent = buildAccordionTriggerContent({
+          title: scene.name,
+          helpLines: [`${getHouseholdDisplayName(scene.householdId)}${coordinatorLabel}`],
+          isDraft: Boolean(options.isDraft),
+          isActive,
+        });
+        trigger.appendChild(triggerContent.copy);
+        trigger.appendChild(triggerContent.chevron);
         trigger.addEventListener("click", () => {
           if (state.activeSceneId === scene.id) {
             state.activeSceneId = null;
@@ -1767,16 +1796,17 @@
         const ampName = room.ampPlayerId
           ? getPlayerNameForHousehold(room.householdId, room.ampPlayerId)
           : "No Amp selected";
-        const kicker = options.isDraft ? `<span class="scene-accordion-kicker">Unsaved Draft</span>` : "";
-        trigger.innerHTML = `
-          <div class="scene-accordion-copy">
-            ${kicker}
-            <strong>${getVirtualRoomPairHeading(room)}</strong>
-            <div class="scene-help">${getHouseholdDisplayName(room.householdId)} - ${ampName}</div>
-            <div class="scene-help">${getVirtualRoomPairSummary(room)}</div>
-          </div>
-          <span class="scene-accordion-chevron" aria-hidden="true">${getAccordionChevronMarkup(isActive)}</span>
-        `;
+        const triggerContent = buildAccordionTriggerContent({
+          title: getVirtualRoomPairHeading(room),
+          helpLines: [
+            `${getHouseholdDisplayName(room.householdId)} - ${ampName}`,
+            getVirtualRoomPairSummary(room),
+          ],
+          isDraft: Boolean(options.isDraft),
+          isActive,
+        });
+        trigger.appendChild(triggerContent.copy);
+        trigger.appendChild(triggerContent.chevron);
         trigger.addEventListener("click", () => {
           if (state.activeVirtualRoomId === room.pairId) {
             state.activeVirtualRoomId = null;

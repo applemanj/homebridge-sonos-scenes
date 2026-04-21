@@ -13,6 +13,9 @@ export class VirtualRoomSpeakerAccessory {
   private activeMutations = 0;
   private latestMutationId = 0;
   private refreshInFlight?: Promise<void>;
+  private pendingBrightnessValue?: number;
+  private brightnessInflight?: Promise<void>;
+  private reconciliationTimer?: ReturnType<typeof setTimeout>;
 
   constructor(
     private readonly platform: SonosScenesPlatform,
@@ -82,39 +85,75 @@ export class VirtualRoomSpeakerAccessory {
 
   private async handleBrightnessSet(value: CharacteristicValue): Promise<void> {
     const nextVolume = Math.max(0, Math.min(this.room.maxVolume, Math.round(Number(value))));
-    const mutationId = this.beginMutation();
-    this.logger.info(`HomeKit requested brightness=${nextVolume} for "${this.room.name}".`);
-    try {
-      if (nextVolume > 0) {
-        this.lastKnownActiveVolume = nextVolume;
-        if (this.applyMutationState(
-          await this.platform.setVirtualRoomVolume(this.room.id, nextVolume),
-          mutationId,
-          `brightness=${nextVolume}`,
-        )) {
-          this.logger.info(
-            `Applied brightness change for "${this.room.name}": on=${this.lastKnownOn}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
-          );
-        }
-        return;
-      }
+    this.applyOptimisticBrightness(nextVolume);
+    return this.scheduleBrightness(nextVolume);
+  }
 
-      if (this.lastKnownVolume > 0) {
-        this.lastKnownActiveVolume = this.lastKnownVolume;
+  private applyOptimisticBrightness(nextVolume: number): void {
+    if (nextVolume > 0) {
+      this.lastKnownActiveVolume = nextVolume;
+      this.lastKnownMuted = false;
+      this.lastKnownOn = true;
+    } else if (this.lastKnownVolume > 0) {
+      this.lastKnownActiveVolume = this.lastKnownVolume;
+      this.lastKnownOn = false;
+    }
+    this.lastKnownVolume = nextVolume;
+    this.service.updateCharacteristic(this.platform.Characteristic.On, this.lastKnownOn);
+    this.service.updateCharacteristic(this.platform.Characteristic.Brightness, this.lastKnownVolume);
+  }
+
+  private scheduleBrightness(target: number): Promise<void> {
+    this.pendingBrightnessValue = target;
+    if (this.brightnessInflight) {
+      return this.brightnessInflight;
+    }
+
+    this.brightnessInflight = this.drainBrightness().finally(() => {
+      this.brightnessInflight = undefined;
+    });
+    return this.brightnessInflight;
+  }
+
+  private async drainBrightness(): Promise<void> {
+    let pendingError: unknown;
+
+    while (this.pendingBrightnessValue !== undefined) {
+      const target = this.pendingBrightnessValue;
+      this.pendingBrightnessValue = undefined;
+
+      try {
+        await this.applyBrightness(target);
+        pendingError = undefined;
+      } catch (error) {
+        pendingError = error;
+        if (this.pendingBrightnessValue === undefined) {
+          throw error;
+        }
       }
-      if (this.applyMutationState(
-        await this.platform.setVirtualRoomVolume(this.room.id, 0),
-        mutationId,
-        `brightness=${nextVolume}`,
-      )) {
+    }
+
+    if (pendingError) {
+      throw pendingError;
+    }
+  }
+
+  private async applyBrightness(target: number): Promise<void> {
+    const mutationId = this.beginMutation();
+    this.logger.info(`HomeKit requested brightness=${target} for "${this.room.name}".`);
+    try {
+      const state = await this.platform.setVirtualRoomVolume(this.room.id, target);
+      if (this.applyMutationState(state, mutationId, `brightness=${target}`)) {
         this.logger.info(
           `Applied brightness change for "${this.room.name}": on=${this.lastKnownOn}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
         );
+        this.scheduleReconciliation();
       }
     } catch (error) {
       this.logger.error(
         `Failed to set brightness for "${this.room.name}": ${error instanceof Error ? error.message : String(error)}`,
       );
+      this.scheduleReconciliation(0);
       throw error;
     } finally {
       this.endMutation();
@@ -130,6 +169,7 @@ export class VirtualRoomSpeakerAccessory {
     const nextOn = value === true;
     const mutationId = this.beginMutation();
     this.logger.info(`HomeKit requested on=${nextOn} for "${this.room.name}".`);
+    this.applyOptimisticOn(nextOn);
     try {
       if (nextOn) {
         if (this.applyMutationState(
@@ -140,13 +180,11 @@ export class VirtualRoomSpeakerAccessory {
           this.logger.info(
             `Applied on-state change for "${this.room.name}": on=${this.lastKnownOn}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
           );
+          this.scheduleReconciliation();
         }
         return;
       }
 
-      if (this.lastKnownVolume > 0) {
-        this.lastKnownActiveVolume = this.lastKnownVolume;
-      }
       if (this.applyMutationState(
         await this.platform.deactivateVirtualRoom(this.room.id),
         mutationId,
@@ -155,15 +193,35 @@ export class VirtualRoomSpeakerAccessory {
         this.logger.info(
           `Applied on-state change for "${this.room.name}": on=${this.lastKnownOn}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
         );
+        this.scheduleReconciliation();
       }
     } catch (error) {
       this.logger.error(
         `Failed to set on=${nextOn} for "${this.room.name}": ${error instanceof Error ? error.message : String(error)}`,
       );
+      this.scheduleReconciliation(0);
       throw error;
     } finally {
       this.endMutation();
     }
+  }
+
+  private applyOptimisticOn(nextOn: boolean): void {
+    if (nextOn) {
+      this.lastKnownOn = true;
+      this.lastKnownMuted = false;
+      if (this.lastKnownVolume === 0 && this.lastKnownActiveVolume > 0) {
+        this.lastKnownVolume = this.lastKnownActiveVolume;
+      }
+    } else {
+      if (this.lastKnownVolume > 0) {
+        this.lastKnownActiveVolume = this.lastKnownVolume;
+      }
+      this.lastKnownOn = false;
+    }
+
+    this.service.updateCharacteristic(this.platform.Characteristic.On, this.lastKnownOn);
+    this.service.updateCharacteristic(this.platform.Characteristic.Brightness, this.lastKnownVolume);
   }
 
   private queueRefresh(): void {
@@ -181,6 +239,17 @@ export class VirtualRoomSpeakerAccessory {
       .finally(() => {
         this.refreshInFlight = undefined;
       });
+  }
+
+  private scheduleReconciliation(delayMs = 600): void {
+    if (this.reconciliationTimer) {
+      clearTimeout(this.reconciliationTimer);
+    }
+
+    this.reconciliationTimer = setTimeout(() => {
+      this.reconciliationTimer = undefined;
+      this.queueRefresh();
+    }, delayMs);
   }
 
   private async refreshFromPlatform(): Promise<void> {

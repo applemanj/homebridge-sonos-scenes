@@ -12,6 +12,7 @@ export class SceneSpeakerAccessory {
   private activeMutations = 0;
   private latestMutationId = 0;
   private refreshInFlight?: Promise<void>;
+  private reconciliationTimer?: ReturnType<typeof setTimeout>;
 
   constructor(
     private readonly platform: SonosScenesPlatform,
@@ -115,6 +116,7 @@ export class SceneSpeakerAccessory {
         this.logger.info(
           `Applied brightness change for "${this.scene.name}" volume accessory: on=${this.isOn()}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
         );
+        this.scheduleReconciliation();
         return;
       }
 
@@ -125,10 +127,12 @@ export class SceneSpeakerAccessory {
       this.logger.info(
         `Applied brightness change for "${this.scene.name}" volume accessory: on=${this.isOn()}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
       );
+      this.scheduleReconciliation();
     } catch (error) {
       this.logger.error(
         `Failed to set brightness for "${this.scene.name}" volume accessory: ${error instanceof Error ? error.message : String(error)}`,
       );
+      this.scheduleReconciliation(0);
       throw error;
     } finally {
       this.endMutation();
@@ -160,6 +164,7 @@ export class SceneSpeakerAccessory {
         this.logger.info(
           `Applied on-state change for "${this.scene.name}" volume accessory: on=${this.isOn()}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
         );
+        this.scheduleReconciliation();
         return;
       }
 
@@ -173,10 +178,12 @@ export class SceneSpeakerAccessory {
       this.logger.info(
         `Applied on-state change for "${this.scene.name}" volume accessory: on=${this.isOn()}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
       );
+      this.scheduleReconciliation();
     } catch (error) {
       this.logger.error(
         `Failed to set on=${nextOn} for "${this.scene.name}" volume accessory: ${error instanceof Error ? error.message : String(error)}`,
       );
+      this.scheduleReconciliation(0);
       throw error;
     } finally {
       this.endMutation();
@@ -202,6 +209,17 @@ export class SceneSpeakerAccessory {
       .finally(() => {
         this.refreshInFlight = undefined;
       });
+  }
+
+  private scheduleReconciliation(delayMs = 600): void {
+    if (this.reconciliationTimer) {
+      clearTimeout(this.reconciliationTimer);
+    }
+
+    this.reconciliationTimer = setTimeout(() => {
+      this.reconciliationTimer = undefined;
+      this.queueRefresh();
+    }, delayMs);
   }
 
   private async refreshFromPlatform(): Promise<void> {

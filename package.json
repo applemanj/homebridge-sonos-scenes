@@ -1,6 +1,6 @@
 {
   "name": "homebridge-sonos-scenes",
-  "version": "0.1.27",
+  "version": "0.1.28",
   "description": "Homebridge plugin for Sonos workflow scenes and orchestration.",
   "author": "applemanj",
   "homepage": "https://github.com/applemanj/homebridge-sonos-scenes#readme",

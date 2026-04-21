@@ -341,6 +341,8 @@ function emptyChannelState(): ChannelAudioState {
   };
 }
 
+const LIVE_DISCOVERY_TTL_MS = 5_000;
+
 export class LocalSonosTransport implements SonosTransport {
   public readonly kind = "local";
   private livePlayers = new Map<string, LivePlayerRecord>();
@@ -349,11 +351,17 @@ export class LocalSonosTransport implements SonosTransport {
   private fixtureLoaded = false;
   private householdRoots = new Map<string, Sonos>();
   private lastSnapshot = normalizeFixtureSnapshot(sampleTopology);
+  private liveSnapshotCache?: { snapshot: TopologySnapshot; expiresAt: number };
+  private liveDiscoveryInFlight?: Promise<TopologySnapshot | undefined>;
 
   constructor(
     private readonly config: LocalTransportConfig,
     private readonly logger?: StructuredLogger,
   ) {}
+
+  private invalidateTopologyCache(): void {
+    this.liveSnapshotCache = undefined;
+  }
 
   supportsSource(kind: SceneSourceKind): boolean {
     if (kind === "tv") {
@@ -372,7 +380,7 @@ export class LocalSonosTransport implements SonosTransport {
   }
 
   async discoverTopology(): Promise<TopologySnapshot> {
-    const liveSnapshot = this.config.enableLiveDiscovery ? await this.tryLiveDiscovery() : undefined;
+    const liveSnapshot = this.config.enableLiveDiscovery ? await this.getLiveTopology() : undefined;
     if (liveSnapshot) {
       this.lastSnapshot = liveSnapshot;
       return clone(liveSnapshot);
@@ -381,6 +389,33 @@ export class LocalSonosTransport implements SonosTransport {
     const fixtureSnapshot = await this.loadFixtureSnapshot();
     this.lastSnapshot = fixtureSnapshot;
     return clone(fixtureSnapshot);
+  }
+
+  private async getLiveTopology(): Promise<TopologySnapshot | undefined> {
+    const now = Date.now();
+    if (this.liveSnapshotCache && this.liveSnapshotCache.expiresAt > now) {
+      return this.liveSnapshotCache.snapshot;
+    }
+
+    if (this.liveDiscoveryInFlight) {
+      return this.liveDiscoveryInFlight;
+    }
+
+    this.liveDiscoveryInFlight = this.tryLiveDiscovery()
+      .then((snapshot) => {
+        if (snapshot) {
+          this.liveSnapshotCache = {
+            snapshot,
+            expiresAt: Date.now() + LIVE_DISCOVERY_TTL_MS,
+          };
+        }
+        return snapshot;
+      })
+      .finally(() => {
+        this.liveDiscoveryInFlight = undefined;
+      });
+
+    return this.liveDiscoveryInFlight;
   }
 
   async setGroupMembers(householdId: string, coordinatorPlayerId: string, memberPlayerIds: string[]): Promise<void> {
@@ -457,6 +492,7 @@ export class LocalSonosTransport implements SonosTransport {
     }
 
     this.householdRoots.set(householdId, coordinatorRecord.device);
+    this.invalidateTopologyCache();
   }
 
   async loadLineIn(
@@ -584,7 +620,7 @@ export class LocalSonosTransport implements SonosTransport {
       return this.fixtureAudioState(playerId).master.volume;
     }
 
-    this.requireHousehold(await this.discoverTopology(), householdId);
+    this.requireLiveRecordInHousehold(playerId, householdId);
     return this.getLivePlayerVolume(playerId);
   }
 
@@ -596,7 +632,7 @@ export class LocalSonosTransport implements SonosTransport {
       return;
     }
 
-    this.requireHousehold(await this.discoverTopology(), householdId);
+    this.requireLiveRecordInHousehold(playerId, householdId);
     await this.setLivePlayerVolume(playerId, volume);
   }
 
@@ -606,7 +642,7 @@ export class LocalSonosTransport implements SonosTransport {
       return this.fixtureChannelAudioState(playerId, channel).volume;
     }
 
-    this.requireHousehold(await this.discoverTopology(), householdId);
+    this.requireLiveRecordInHousehold(playerId, householdId);
     return this.getLivePlayerChannelVolume(playerId, channel);
   }
 
@@ -623,7 +659,7 @@ export class LocalSonosTransport implements SonosTransport {
       return;
     }
 
-    this.requireHousehold(await this.discoverTopology(), householdId);
+    this.requireLiveRecordInHousehold(playerId, householdId);
     await this.setLivePlayerChannelVolume(playerId, channel, volume);
   }
 
@@ -671,7 +707,7 @@ export class LocalSonosTransport implements SonosTransport {
       return this.fixtureAudioState(playerId).master.muted;
     }
 
-    this.requireHousehold(await this.discoverTopology(), householdId);
+    this.requireLiveRecordInHousehold(playerId, householdId);
     return this.getLivePlayerMuted(playerId);
   }
 
@@ -683,7 +719,7 @@ export class LocalSonosTransport implements SonosTransport {
       return;
     }
 
-    this.requireHousehold(await this.discoverTopology(), householdId);
+    this.requireLiveRecordInHousehold(playerId, householdId);
     await this.setLivePlayerMuted(playerId, muted);
   }
 
@@ -693,7 +729,7 @@ export class LocalSonosTransport implements SonosTransport {
       return this.fixtureChannelAudioState(playerId, channel).muted;
     }
 
-    this.requireHousehold(await this.discoverTopology(), householdId);
+    this.requireLiveRecordInHousehold(playerId, householdId);
     return this.getLivePlayerChannelMuted(playerId, channel);
   }
 
@@ -710,7 +746,7 @@ export class LocalSonosTransport implements SonosTransport {
       return;
     }
 
-    this.requireHousehold(await this.discoverTopology(), householdId);
+    this.requireLiveRecordInHousehold(playerId, householdId);
     await this.setLivePlayerChannelMuted(playerId, channel, muted);
   }
 
@@ -781,6 +817,8 @@ export class LocalSonosTransport implements SonosTransport {
       const player = this.requireLiveRecord(playerId);
       await player.device.leaveGroup();
     }
+
+    this.invalidateTopologyCache();
   }
 
   private async tryLiveDiscovery(): Promise<TopologySnapshot | undefined> {
@@ -988,7 +1026,17 @@ export class LocalSonosTransport implements SonosTransport {
   private requireLiveRecord(playerId: string): LivePlayerRecord {
     const record = this.livePlayers.get(playerId);
     if (!record) {
+      this.invalidateTopologyCache();
       throw new Error(`Live Sonos record for "${playerId}" is unavailable. Refresh discovery and try again.`);
+    }
+    return record;
+  }
+
+  private requireLiveRecordInHousehold(playerId: string, householdId: string): LivePlayerRecord {
+    const record = this.requireLiveRecord(playerId);
+    if (record.householdId !== householdId) {
+      this.invalidateTopologyCache();
+      throw new Error(`Player "${playerId}" is not part of household "${householdId}".`);
     }
     return record;
   }

@@ -12,6 +12,7 @@ class FakeTransport implements SonosTransport {
   discoverCalls = 0;
   private topology: TopologySnapshot = JSON.parse(JSON.stringify(sampleTopology));
   private failSetGroupMembersOnce = true;
+  failPlayerVolumeFor?: string;
 
   supportsSource(kind: SceneSourceKind): boolean {
     return kind !== "tv";
@@ -59,6 +60,9 @@ class FakeTransport implements SonosTransport {
 
   async setPlayerVolume(_householdId: string, playerId: string, volume: number): Promise<void> {
     this.calls.push(`setPlayerVolume:${playerId}:${volume}`);
+    if (this.failPlayerVolumeFor === playerId) {
+      throw new Error(`volume write failed for ${playerId}`);
+    }
   }
 
   async getPlayerChannelVolume(_householdId: string, _playerId: string, _channel: VirtualRoomChannel): Promise<number> {
@@ -173,4 +177,50 @@ test("SceneRunner executes the off ungroup action", async () => {
     "ungroup:RINCON_UPPER_LEVEL:RINCON_PRIMARY_BEDROOM",
   ]);
   assert.equal(transport.discoverCalls, 1);
+});
+
+test("SceneRunner surfaces partial failure when one parallel room volume write fails", async () => {
+  const transport = new FakeTransport();
+  (transport as any).failSetGroupMembersOnce = false;
+  transport.failPlayerVolumeFor = "RINCON_PRIMARY_BEDROOM";
+  const discovery = new DiscoveryService(transport);
+  const runner = new SceneRunner(discovery, transport, new StructuredLogger("test", "debug"));
+
+  const scene: SceneDefinition = {
+    id: "scene-partial-failure",
+    name: "Parallel Volume Failure",
+    householdId: "local-household",
+    coordinatorPlayerId: "RINCON_UPPER_LEVEL",
+    memberPlayerIds: ["RINCON_PRIMARY_BEDROOM"],
+    source: {
+      kind: "line_in",
+      deviceId: "RINCON_UPPER_LEVEL",
+      playOnCompletion: true,
+    },
+    coordinatorVolume: 20,
+    playerVolumes: [
+      {
+        playerId: "RINCON_PRIMARY_BEDROOM",
+        volume: 16,
+      },
+    ],
+    offBehavior: {
+      kind: "none",
+    },
+    settleMs: 0,
+    retryCount: 0,
+    retryDelayMs: 0,
+    autoResetMs: 0,
+  };
+
+  const result = await runner.runOn(scene);
+  assert.equal(result.ok, false);
+  assert.match(result.errors[0] ?? "", /volume write failed for RINCON_PRIMARY_BEDROOM/);
+  assert.deepEqual(
+    new Set(transport.calls.filter((call) => call.startsWith("setPlayerVolume:"))),
+    new Set([
+      "setPlayerVolume:RINCON_UPPER_LEVEL:20",
+      "setPlayerVolume:RINCON_PRIMARY_BEDROOM:16",
+    ]),
+  );
 });

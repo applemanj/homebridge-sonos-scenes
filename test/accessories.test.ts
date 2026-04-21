@@ -117,6 +117,7 @@ const fakePlatform = {
     warn: () => undefined,
     error: () => undefined,
   }),
+  isInitialDiscoveryComplete: () => false,
 } as any;
 
 function buildScene(name: string): SceneDefinition {
@@ -189,17 +190,23 @@ test("SceneSpeakerAccessory keeps HomeKit name fields in sync when a scene is re
   assert.equal(service.values.get(fakePlatform.Characteristic.ConfiguredName), "Office Sleep Volume");
 });
 
-test("VirtualRoomSpeakerAccessory ignores stale overlapping brightness results", async () => {
+test("VirtualRoomSpeakerAccessory coalesces overlapping brightness requests to the latest target", async () => {
   const accessory = new FakeAccessory();
   const room = buildVirtualRoom("Kitchen");
   const first = createDeferred<VirtualRoomState>();
   const second = createDeferred<VirtualRoomState>();
-  let callCount = 0;
+  const secondCallFired = createDeferred<void>();
+  const callTargets: number[] = [];
   const platform = {
     ...fakePlatform,
-    setVirtualRoomVolume: async () => {
-      callCount += 1;
-      return callCount === 1 ? first.promise : second.promise;
+    setVirtualRoomVolume: async (_roomId: string, volume: number) => {
+      callTargets.push(volume);
+      if (callTargets.length === 1) {
+        return first.promise;
+      }
+
+      secondCallFired.resolve();
+      return second.promise;
     },
     activateVirtualRoom: async () => ({ on: true, volume: 30, muted: false }),
     deactivateVirtualRoom: async () => ({ on: false, volume: 0, muted: true }),
@@ -213,12 +220,15 @@ test("VirtualRoomSpeakerAccessory ignores stale overlapping brightness results",
   const firstSet = Promise.resolve(brightness.invokeSet(39));
   const secondSet = Promise.resolve(brightness.invokeSet(57));
 
-  second.resolve({ on: true, volume: 57, muted: false });
-  await secondSet;
   assert.equal(service.values.get(fakePlatform.Characteristic.Brightness), 57);
+  assert.deepEqual(callTargets, [39]);
 
   first.resolve({ on: true, volume: 39, muted: false });
-  await firstSet;
+  await secondCallFired.promise;
+  assert.deepEqual(callTargets, [39, 57]);
+
+  second.resolve({ on: true, volume: 57, muted: false });
+  await Promise.all([firstSet, secondSet]);
   assert.equal(service.values.get(fakePlatform.Characteristic.Brightness), 57);
 });
 

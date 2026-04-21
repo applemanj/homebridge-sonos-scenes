@@ -11,13 +11,17 @@ function writeJson(response, statusCode, payload) {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
   });
-  response.end(JSON.stringify(payload, null, 2));
+  response.end(JSON.stringify(payload));
 }
 
 function bearerToken(request) {
   const header = request.headers.authorization || "";
-  const match = /^Bearer\s+(.+)$/i.exec(header);
-  return match?.[1]?.trim() || "";
+  const [scheme = "", ...tokenParts] = header.trim().split(/\s+/);
+  if (scheme.toLowerCase() !== "bearer") {
+    return "";
+  }
+
+  return tokenParts.join(" ").trim();
 }
 
 function isAuthorized(request) {
@@ -52,9 +56,20 @@ function notImplemented(response, route, extra = {}) {
   });
 }
 
+function pathSegments(pathname) {
+  return pathname.split("/").filter(Boolean);
+}
+
+function matchesRoute(segments, expected) {
+  return segments.length === expected.length && expected.every((part, index) =>
+    part === "*" ? segments[index].length > 0 : segments[index] === part
+  );
+}
+
 const server = createServer(async (request, response) => {
   const url = new URL(request.url || "/", `http://${request.headers.host || `${host}:${port}`}`);
   const pathname = url.pathname;
+  const segments = pathSegments(pathname);
   const method = request.method || "GET";
 
   if (method === "GET" && pathname === "/healthz") {
@@ -96,7 +111,7 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    if (method === "GET" && /^\/v1\/households\/[^/]+\/groups$/.test(pathname)) {
+    if (method === "GET" && matchesRoute(segments, ["v1", "households", "*", "groups"])) {
       notImplemented(response, pathname, {
         groups: [],
         players: [],
@@ -104,21 +119,21 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    if (method === "GET" && /^\/v1\/households\/[^/]+\/favorites$/.test(pathname)) {
+    if (method === "GET" && matchesRoute(segments, ["v1", "households", "*", "favorites"])) {
       notImplemented(response, pathname, {
         favorites: [],
       });
       return;
     }
 
-    if (method === "GET" && /^\/v1\/households\/[^/]+\/playlists$/.test(pathname)) {
+    if (method === "GET" && matchesRoute(segments, ["v1", "households", "*", "playlists"])) {
       notImplemented(response, pathname, {
         playlists: [],
       });
       return;
     }
 
-    if (method === "POST" && /^\/v1\/groups\/[^/]+\/favorites\/load$/.test(pathname)) {
+    if (method === "POST" && matchesRoute(segments, ["v1", "groups", "*", "favorites", "load"])) {
       const body = await readJsonBody(request);
       notImplemented(response, pathname, {
         received: body,
@@ -126,7 +141,7 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    if (method === "POST" && /^\/v1\/groups\/[^/]+\/playlists\/load$/.test(pathname)) {
+    if (method === "POST" && matchesRoute(segments, ["v1", "groups", "*", "playlists", "load"])) {
       const body = await readJsonBody(request);
       notImplemented(response, pathname, {
         received: body,
@@ -139,9 +154,10 @@ const server = createServer(async (request, response) => {
       message: `No route matched ${method} ${pathname}.`,
     });
   } catch (error) {
+    console.error(`[${brokerName}] request failed for ${method} ${pathname}:`, error);
     writeJson(response, 500, {
       ok: false,
-      message: error instanceof Error ? error.message : String(error),
+      message: "Internal broker error.",
     });
   }
 });
