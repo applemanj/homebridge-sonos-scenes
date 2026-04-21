@@ -32,6 +32,7 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
   private readonly switchAccessories = new Map<string, SceneSwitchAccessory>();
   private readonly speakerAccessories = new Map<string, SceneSpeakerAccessory>();
   private readonly virtualRoomAccessories = new Map<string, VirtualRoomSpeakerAccessory>();
+  private initialDiscoveryComplete = false;
 
   constructor(
     public readonly log: Logger,
@@ -126,6 +127,10 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
 
   createScopedLogger(scope: string): StructuredLogger {
     return this.logger.child(scope);
+  }
+
+  isInitialDiscoveryComplete(): boolean {
+    return this.initialDiscoveryComplete;
   }
 
   async getVirtualRoomState(roomId: string): Promise<VirtualRoomState> {
@@ -232,6 +237,8 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
       this.logger.info(`Discovery complete: ${snapshot.households.length} household(s) available.`);
     } catch (error) {
       this.logger.warn(`Initial discovery failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      this.initialDiscoveryComplete = true;
     }
   }
 

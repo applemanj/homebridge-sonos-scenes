@@ -10,6 +10,8 @@ export class VirtualRoomSpeakerAccessory {
   private lastKnownActiveVolume: number;
   private lastKnownMuted = true;
   private lastKnownOn = false;
+  private activeMutations = 0;
+  private latestMutationId = 0;
   private refreshInFlight?: Promise<void>;
 
   constructor(
@@ -80,29 +82,42 @@ export class VirtualRoomSpeakerAccessory {
 
   private async handleBrightnessSet(value: CharacteristicValue): Promise<void> {
     const nextVolume = Math.max(0, Math.min(this.room.maxVolume, Math.round(Number(value))));
+    const mutationId = this.beginMutation();
     this.logger.info(`HomeKit requested brightness=${nextVolume} for "${this.room.name}".`);
     try {
       if (nextVolume > 0) {
         this.lastKnownActiveVolume = nextVolume;
-        this.applyState(await this.platform.setVirtualRoomVolume(this.room.id, nextVolume));
-        this.logger.info(
-          `Applied brightness change for "${this.room.name}": on=${this.lastKnownOn}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
-        );
+        if (this.applyMutationState(
+          await this.platform.setVirtualRoomVolume(this.room.id, nextVolume),
+          mutationId,
+          `brightness=${nextVolume}`,
+        )) {
+          this.logger.info(
+            `Applied brightness change for "${this.room.name}": on=${this.lastKnownOn}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
+          );
+        }
         return;
       }
 
       if (this.lastKnownVolume > 0) {
         this.lastKnownActiveVolume = this.lastKnownVolume;
       }
-      this.applyState(await this.platform.setVirtualRoomVolume(this.room.id, 0));
-      this.logger.info(
-        `Applied brightness change for "${this.room.name}": on=${this.lastKnownOn}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
-      );
+      if (this.applyMutationState(
+        await this.platform.setVirtualRoomVolume(this.room.id, 0),
+        mutationId,
+        `brightness=${nextVolume}`,
+      )) {
+        this.logger.info(
+          `Applied brightness change for "${this.room.name}": on=${this.lastKnownOn}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
+        );
+      }
     } catch (error) {
       this.logger.error(
         `Failed to set brightness for "${this.room.name}": ${error instanceof Error ? error.message : String(error)}`,
       );
       throw error;
+    } finally {
+      this.endMutation();
     }
   }
 
@@ -113,33 +128,46 @@ export class VirtualRoomSpeakerAccessory {
 
   private async handleOnSet(value: CharacteristicValue): Promise<void> {
     const nextOn = value === true;
+    const mutationId = this.beginMutation();
     this.logger.info(`HomeKit requested on=${nextOn} for "${this.room.name}".`);
     try {
       if (nextOn) {
-        this.applyState(await this.platform.activateVirtualRoom(this.room.id, this.lastKnownActiveVolume));
-        this.logger.info(
-          `Applied on-state change for "${this.room.name}": on=${this.lastKnownOn}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
-        );
+        if (this.applyMutationState(
+          await this.platform.activateVirtualRoom(this.room.id, this.lastKnownActiveVolume),
+          mutationId,
+          `on=${nextOn}`,
+        )) {
+          this.logger.info(
+            `Applied on-state change for "${this.room.name}": on=${this.lastKnownOn}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
+          );
+        }
         return;
       }
 
       if (this.lastKnownVolume > 0) {
         this.lastKnownActiveVolume = this.lastKnownVolume;
       }
-      this.applyState(await this.platform.deactivateVirtualRoom(this.room.id));
-      this.logger.info(
-        `Applied on-state change for "${this.room.name}": on=${this.lastKnownOn}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
-      );
+      if (this.applyMutationState(
+        await this.platform.deactivateVirtualRoom(this.room.id),
+        mutationId,
+        `on=${nextOn}`,
+      )) {
+        this.logger.info(
+          `Applied on-state change for "${this.room.name}": on=${this.lastKnownOn}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
+        );
+      }
     } catch (error) {
       this.logger.error(
         `Failed to set on=${nextOn} for "${this.room.name}": ${error instanceof Error ? error.message : String(error)}`,
       );
       throw error;
+    } finally {
+      this.endMutation();
     }
   }
 
   private queueRefresh(): void {
-    if (this.refreshInFlight) {
+    if (!this.platform.isInitialDiscoveryComplete() || this.refreshInFlight || this.activeMutations > 0) {
       return;
     }
 
@@ -160,6 +188,26 @@ export class VirtualRoomSpeakerAccessory {
     this.logger.debug(
       `Refreshed "${this.room.name}" state: on=${this.lastKnownOn}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
     );
+  }
+
+  private beginMutation(): number {
+    this.activeMutations += 1;
+    this.latestMutationId += 1;
+    return this.latestMutationId;
+  }
+
+  private endMutation(): void {
+    this.activeMutations = Math.max(0, this.activeMutations - 1);
+  }
+
+  private applyMutationState(state: VirtualRoomState, mutationId: number, label: string): boolean {
+    if (mutationId !== this.latestMutationId) {
+      this.logger.debug(`Ignoring stale "${label}" result for "${this.room.name}".`);
+      return false;
+    }
+
+    this.applyState(state);
+    return true;
   }
 
   private applyState(state: VirtualRoomState): void {

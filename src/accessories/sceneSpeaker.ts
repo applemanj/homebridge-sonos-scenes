@@ -9,6 +9,8 @@ export class SceneSpeakerAccessory {
   private lastKnownVolume: number;
   private lastKnownActiveVolume: number;
   private lastKnownMuted = false;
+  private activeMutations = 0;
+  private latestMutationId = 0;
   private refreshInFlight?: Promise<void>;
 
   constructor(
@@ -95,19 +97,21 @@ export class SceneSpeakerAccessory {
 
   private async handleBrightnessSet(value: CharacteristicValue): Promise<void> {
     const nextVolume = Math.max(0, Math.min(100, Math.round(Number(value))));
+    const mutationId = this.beginMutation();
     this.logger.info(`HomeKit requested brightness=${nextVolume} for "${this.scene.name}" volume accessory.`);
     try {
       await this.platform.setSceneVolume(this.scene.id, nextVolume);
-      this.lastKnownVolume = nextVolume;
-      this.service.updateCharacteristic(this.platform.Characteristic.Brightness, nextVolume);
+      if (!this.applyVolumeMutation(nextVolume, mutationId, `brightness=${nextVolume}`)) {
+        return;
+      }
 
       if (nextVolume > 0) {
-        this.lastKnownActiveVolume = nextVolume;
         if (this.lastKnownMuted) {
           await this.platform.setSceneMuted(this.scene.id, false);
-          this.lastKnownMuted = false;
+          if (!this.applyMuteMutation(false, mutationId, `brightness=${nextVolume}`)) {
+            return;
+          }
         }
-        this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
         this.logger.info(
           `Applied brightness change for "${this.scene.name}" volume accessory: on=${this.isOn()}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
         );
@@ -115,8 +119,9 @@ export class SceneSpeakerAccessory {
       }
 
       await this.platform.setSceneMuted(this.scene.id, true);
-      this.lastKnownMuted = true;
-      this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
+      if (!this.applyMuteMutation(true, mutationId, `brightness=${nextVolume}`)) {
+        return;
+      }
       this.logger.info(
         `Applied brightness change for "${this.scene.name}" volume accessory: on=${this.isOn()}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
       );
@@ -125,6 +130,8 @@ export class SceneSpeakerAccessory {
         `Failed to set brightness for "${this.scene.name}" volume accessory: ${error instanceof Error ? error.message : String(error)}`,
       );
       throw error;
+    } finally {
+      this.endMutation();
     }
   }
 
@@ -135,18 +142,21 @@ export class SceneSpeakerAccessory {
 
   private async handleOnSet(value: CharacteristicValue): Promise<void> {
     const nextOn = value === true;
+    const mutationId = this.beginMutation();
     this.logger.info(`HomeKit requested on=${nextOn} for "${this.scene.name}" volume accessory.`);
     try {
       if (nextOn) {
         const restoredVolume = this.lastKnownVolume > 0 ? this.lastKnownVolume : this.lastKnownActiveVolume;
         if (this.lastKnownVolume <= 0 && restoredVolume > 0) {
           await this.platform.setSceneVolume(this.scene.id, restoredVolume);
-          this.lastKnownVolume = restoredVolume;
-          this.service.updateCharacteristic(this.platform.Characteristic.Brightness, restoredVolume);
+          if (!this.applyVolumeMutation(restoredVolume, mutationId, `on=${nextOn}`)) {
+            return;
+          }
         }
         await this.platform.setSceneMuted(this.scene.id, false);
-        this.lastKnownMuted = false;
-        this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
+        if (!this.applyMuteMutation(false, mutationId, `on=${nextOn}`)) {
+          return;
+        }
         this.logger.info(
           `Applied on-state change for "${this.scene.name}" volume accessory: on=${this.isOn()}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
         );
@@ -157,8 +167,9 @@ export class SceneSpeakerAccessory {
         this.lastKnownActiveVolume = this.lastKnownVolume;
       }
       await this.platform.setSceneMuted(this.scene.id, true);
-      this.lastKnownMuted = true;
-      this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
+      if (!this.applyMuteMutation(true, mutationId, `on=${nextOn}`)) {
+        return;
+      }
       this.logger.info(
         `Applied on-state change for "${this.scene.name}" volume accessory: on=${this.isOn()}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
       );
@@ -167,6 +178,8 @@ export class SceneSpeakerAccessory {
         `Failed to set on=${nextOn} for "${this.scene.name}" volume accessory: ${error instanceof Error ? error.message : String(error)}`,
       );
       throw error;
+    } finally {
+      this.endMutation();
     }
   }
 
@@ -175,7 +188,7 @@ export class SceneSpeakerAccessory {
   }
 
   private queueRefresh(): void {
-    if (this.refreshInFlight) {
+    if (!this.platform.isInitialDiscoveryComplete() || this.refreshInFlight || this.activeMutations > 0) {
       return;
     }
 
@@ -213,5 +226,41 @@ export class SceneSpeakerAccessory {
         `State refresh failed for "${this.scene.name}" volume accessory: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  private beginMutation(): number {
+    this.activeMutations += 1;
+    this.latestMutationId += 1;
+    return this.latestMutationId;
+  }
+
+  private endMutation(): void {
+    this.activeMutations = Math.max(0, this.activeMutations - 1);
+  }
+
+  private applyVolumeMutation(volume: number, mutationId: number, label: string): boolean {
+    if (mutationId !== this.latestMutationId) {
+      this.logger.debug(`Ignoring stale "${label}" result for "${this.scene.name}" volume accessory.`);
+      return false;
+    }
+
+    this.lastKnownVolume = volume;
+    if (volume > 0) {
+      this.lastKnownActiveVolume = volume;
+    }
+    this.service.updateCharacteristic(this.platform.Characteristic.Brightness, volume);
+    this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
+    return true;
+  }
+
+  private applyMuteMutation(muted: boolean, mutationId: number, label: string): boolean {
+    if (mutationId !== this.latestMutationId) {
+      this.logger.debug(`Ignoring stale "${label}" result for "${this.scene.name}" volume accessory.`);
+      return false;
+    }
+
+    this.lastKnownMuted = muted;
+    this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
+    return true;
   }
 }

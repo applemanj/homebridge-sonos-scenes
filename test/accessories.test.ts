@@ -2,15 +2,29 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { SceneSpeakerAccessory } from "../src/accessories/sceneSpeaker";
 import { SceneSwitchAccessory } from "../src/accessories/sceneSwitch";
-import type { SceneDefinition } from "../src/types";
+import { VirtualRoomSpeakerAccessory } from "../src/accessories/virtualRoomSpeaker";
+import type { SceneDefinition, VirtualRoomDefinition, VirtualRoomState } from "../src/types";
 
 class FakeCharacteristicHandle {
-  onGet(_handler: () => unknown): this {
+  private getHandler?: () => unknown;
+  private setHandler?: (value: unknown) => unknown;
+
+  onGet(handler: () => unknown): this {
+    this.getHandler = handler;
     return this;
   }
 
-  onSet(_handler: (value: unknown) => unknown): this {
+  onSet(handler: (value: unknown) => unknown): this {
+    this.setHandler = handler;
     return this;
+  }
+
+  invokeGet(): unknown {
+    return this.getHandler?.();
+  }
+
+  invokeSet(value: unknown): unknown {
+    return this.setHandler?.(value);
   }
 }
 
@@ -120,6 +134,32 @@ function buildScene(name: string): SceneDefinition {
   };
 }
 
+function buildVirtualRoom(name: string): VirtualRoomDefinition {
+  return {
+    id: `virtual-room-${name.toLowerCase().replace(/\s+/g, "-")}`,
+    name,
+    householdId: "household-1",
+    ampPlayerId: "amp-1",
+    channel: "left",
+    defaultVolume: 30,
+    maxVolume: 100,
+    onBehavior: { kind: "restore_last" },
+    offBehavior: { kind: "mute" },
+    lastActiveBehavior: { kind: "none" },
+  };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+
+  return { promise, resolve, reject };
+}
+
 test("SceneSwitchAccessory keeps HomeKit name fields in sync when a scene is renamed", () => {
   const accessory = new FakeAccessory();
   const initialScene = buildScene("Office Bedtime");
@@ -146,4 +186,37 @@ test("SceneSpeakerAccessory keeps HomeKit name fields in sync when a scene is re
   assert.equal(accessory.displayName, "Office Sleep Volume");
   assert.equal(service.values.get(fakePlatform.Characteristic.Name), "Office Sleep Volume");
   assert.equal(service.values.get(fakePlatform.Characteristic.ConfiguredName), "Office Sleep Volume");
+});
+
+test("VirtualRoomSpeakerAccessory ignores stale overlapping brightness results", async () => {
+  const accessory = new FakeAccessory();
+  const room = buildVirtualRoom("Kitchen");
+  const first = createDeferred<VirtualRoomState>();
+  const second = createDeferred<VirtualRoomState>();
+  let callCount = 0;
+  const platform = {
+    ...fakePlatform,
+    setVirtualRoomVolume: async () => {
+      callCount += 1;
+      return callCount === 1 ? first.promise : second.promise;
+    },
+    activateVirtualRoom: async () => ({ on: true, volume: 30, muted: false }),
+    deactivateVirtualRoom: async () => ({ on: false, volume: 0, muted: true }),
+    getVirtualRoomState: async () => ({ on: false, volume: 0, muted: true }),
+  } as any;
+
+  const wrapper = new VirtualRoomSpeakerAccessory(platform, accessory as any, room);
+  const service = accessory.getService(fakePlatform.Service.Lightbulb)!;
+  const brightness = service.getCharacteristic(fakePlatform.Characteristic.Brightness);
+
+  const firstSet = Promise.resolve(brightness.invokeSet(39));
+  const secondSet = Promise.resolve(brightness.invokeSet(57));
+
+  second.resolve({ on: true, volume: 57, muted: false });
+  await secondSet;
+  assert.equal(service.values.get(fakePlatform.Characteristic.Brightness), 57);
+
+  first.resolve({ on: true, volume: 39, muted: false });
+  await firstSet;
+  assert.equal(service.values.get(fakePlatform.Characteristic.Brightness), 57);
 });
