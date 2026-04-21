@@ -140,7 +140,10 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
 
   async activateVirtualRoom(roomId: string, fallbackVolume?: number): Promise<VirtualRoomState> {
     const room = this.getRequiredVirtualRoom(roomId);
-    const currentVolume = await this.transport.getPlayerChannelVolume(room.householdId, room.ampPlayerId, room.channel);
+    const [currentVolume, currentMasterVolume] = await Promise.all([
+      this.transport.getPlayerChannelVolume(room.householdId, room.ampPlayerId, room.channel),
+      this.transport.getPlayerVolume(room.householdId, room.ampPlayerId),
+    ]);
     const targetVolume = Math.max(
       0,
       Math.min(
@@ -158,25 +161,31 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
     );
 
     if (targetVolume > 0) {
-      await this.transport.setPlayerChannelVolume(room.householdId, room.ampPlayerId, room.channel, targetVolume);
+      await this.prepareVirtualRoomPlayback(room, targetVolume, currentMasterVolume);
+      return this.readVirtualRoomState(room);
     }
-    await this.transport.setPlayerMuted(room.householdId, room.ampPlayerId, false);
-    await this.transport.setPlayerChannelMuted(room.householdId, room.ampPlayerId, room.channel, false);
+
+    await Promise.all([
+      this.transport.setPlayerMuted(room.householdId, room.ampPlayerId, false),
+      this.transport.setPlayerChannelMuted(room.householdId, room.ampPlayerId, room.channel, false),
+    ]);
     return this.readVirtualRoomState(room);
   }
 
   async setVirtualRoomVolume(roomId: string, volume: number): Promise<VirtualRoomState> {
     const room = this.getRequiredVirtualRoom(roomId);
     const targetVolume = Math.max(0, Math.min(room.maxVolume, Math.round(volume)));
-    await this.transport.setPlayerChannelVolume(room.householdId, room.ampPlayerId, room.channel, targetVolume);
 
     if (targetVolume > 0) {
-      await this.transport.setPlayerMuted(room.householdId, room.ampPlayerId, false);
-      await this.transport.setPlayerChannelMuted(room.householdId, room.ampPlayerId, room.channel, false);
+      const currentMasterVolume = await this.transport.getPlayerVolume(room.householdId, room.ampPlayerId);
+      await this.prepareVirtualRoomPlayback(room, targetVolume, currentMasterVolume);
       return this.readVirtualRoomState(room);
     }
 
-    await this.transport.setPlayerChannelMuted(room.householdId, room.ampPlayerId, room.channel, false);
+    await Promise.all([
+      this.transport.setPlayerChannelVolume(room.householdId, room.ampPlayerId, room.channel, 0),
+      this.transport.setPlayerChannelMuted(room.householdId, room.ampPlayerId, room.channel, false),
+    ]);
     await this.applyLastActiveBehavior(room);
     return this.readVirtualRoomState(room);
   }
@@ -354,12 +363,33 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
       this.transport.getPlayerChannelMuted(room.householdId, room.ampPlayerId, room.channel),
       this.transport.getPlayerChannelVolume(room.householdId, room.ampPlayerId, room.channel),
     ]);
+    const effectiveVolume = Math.max(0, Math.min(masterVolume, channelVolume));
 
     return {
-      volume: channelVolume,
+      volume: effectiveVolume,
       muted: masterMuted || channelMuted,
-      on: !masterMuted && !channelMuted && masterVolume > 0 && channelVolume > 0,
+      on: !masterMuted && !channelMuted && effectiveVolume > 0,
     };
+  }
+
+  private async prepareVirtualRoomPlayback(
+    room: VirtualRoomDefinition,
+    targetVolume: number,
+    currentMasterVolume: number,
+  ): Promise<void> {
+    const volumeOperations: Array<Promise<void>> = [
+      this.transport.setPlayerChannelVolume(room.householdId, room.ampPlayerId, room.channel, targetVolume),
+    ];
+
+    if (currentMasterVolume < targetVolume) {
+      volumeOperations.push(this.transport.setPlayerVolume(room.householdId, room.ampPlayerId, targetVolume));
+    }
+
+    await Promise.all(volumeOperations);
+    await Promise.all([
+      this.transport.setPlayerMuted(room.householdId, room.ampPlayerId, false),
+      this.transport.setPlayerChannelMuted(room.householdId, room.ampPlayerId, room.channel, false),
+    ]);
   }
 
   private async applyLastActiveBehavior(room: VirtualRoomDefinition): Promise<void> {

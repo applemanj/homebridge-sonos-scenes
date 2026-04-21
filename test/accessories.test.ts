@@ -3,6 +3,7 @@ import test from "node:test";
 import { SceneSpeakerAccessory } from "../src/accessories/sceneSpeaker";
 import { SceneSwitchAccessory } from "../src/accessories/sceneSwitch";
 import { VirtualRoomSpeakerAccessory } from "../src/accessories/virtualRoomSpeaker";
+import { SonosScenesPlatform } from "../src/platform";
 import type { SceneDefinition, VirtualRoomDefinition, VirtualRoomState } from "../src/types";
 
 class FakeCharacteristicHandle {
@@ -219,4 +220,63 @@ test("VirtualRoomSpeakerAccessory ignores stale overlapping brightness results",
   first.resolve({ on: true, volume: 39, muted: false });
   await firstSet;
   assert.equal(service.values.get(fakePlatform.Characteristic.Brightness), 57);
+});
+
+test("SonosScenesPlatform raises master volume when setting a virtual room above the current master", async () => {
+  const room = buildVirtualRoom("Kitchen");
+  const calls: string[] = [];
+  const fakePlatform = {
+    getRequiredVirtualRoom: () => room,
+    readVirtualRoomState: async () => ({ on: true, volume: 65, muted: false }),
+    prepareVirtualRoomPlayback: (SonosScenesPlatform.prototype as any).prepareVirtualRoomPlayback,
+    transport: {
+      getPlayerVolume: async () => 12,
+      setPlayerVolume: async (_householdId: string, _playerId: string, volume: number) => {
+        calls.push(`setPlayerVolume:${volume}`);
+      },
+      setPlayerChannelVolume: async (
+        _householdId: string,
+        _playerId: string,
+        channel: string,
+        volume: number,
+      ) => {
+        calls.push(`setPlayerChannelVolume:${channel}:${volume}`);
+      },
+      setPlayerMuted: async (_householdId: string, _playerId: string, muted: boolean) => {
+        calls.push(`setPlayerMuted:${muted}`);
+      },
+      setPlayerChannelMuted: async (
+        _householdId: string,
+        _playerId: string,
+        channel: string,
+        muted: boolean,
+      ) => {
+        calls.push(`setPlayerChannelMuted:${channel}:${muted}`);
+      },
+    },
+  } as any;
+
+  const result = await SonosScenesPlatform.prototype.setVirtualRoomVolume.call(fakePlatform, room.id, 65);
+
+  assert.deepEqual(result, { on: true, volume: 65, muted: false });
+  assert.equal(calls.includes("setPlayerVolume:65"), true);
+  assert.equal(calls.includes("setPlayerChannelVolume:left:65"), true);
+  assert.equal(calls.includes("setPlayerMuted:false"), true);
+  assert.equal(calls.includes("setPlayerChannelMuted:left:false"), true);
+});
+
+test("SonosScenesPlatform reports effective virtual room volume using the lower of master and channel", async () => {
+  const room = buildVirtualRoom("Kitchen");
+  const fakePlatform = {
+    transport: {
+      getPlayerMuted: async () => false,
+      getPlayerVolume: async () => 12,
+      getPlayerChannelMuted: async () => false,
+      getPlayerChannelVolume: async () => 65,
+    },
+  } as any;
+
+  const state = await (SonosScenesPlatform.prototype as any).readVirtualRoomState.call(fakePlatform, room);
+
+  assert.deepEqual(state, { on: true, volume: 12, muted: false });
 });
