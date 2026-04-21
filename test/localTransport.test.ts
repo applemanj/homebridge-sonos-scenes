@@ -119,3 +119,79 @@ test("LocalSonosTransport updates fixture playback state for pause and stop", as
   group = snapshot.households[0].groups.find((item) => item.coordinatorId === "RINCON_UPPER_LEVEL");
   assert.equal(group?.playbackState, "PLAYBACK_STATE_IDLE");
 });
+
+test("LocalSonosTransport reads live channel state from rendering control instead of master values", async () => {
+  const householdId = "local-household";
+  const playerId = "RINCON_UPPER_LEVEL";
+  const calls: string[] = [];
+  const transport = new LocalSonosTransport({
+    kind: "local",
+    enableLiveDiscovery: false,
+    discoveryTimeoutMs: 2500,
+    requestTimeoutMs: 5000,
+    allowTvSource: false,
+  });
+
+  const fakeDevice = {
+    getVolume: async () => 88,
+    getMuted: async () => false,
+    renderingControlService: () => ({
+      GetVolume: async (channel = "Master") => {
+        calls.push(`GetVolume:${channel}`);
+        return channel === "LF" ? 23 : 61;
+      },
+      GetMute: async (channel = "Master") => {
+        calls.push(`GetMute:${channel}`);
+        return channel === "LF";
+      },
+    }),
+  };
+
+  (transport as unknown as {
+    livePlayers: Map<string, unknown>;
+    discoverTopology: () => Promise<unknown>;
+  }).livePlayers = new Map([
+    [playerId, { device: fakeDevice, host: "127.0.0.1", port: 1400, householdId }],
+  ]);
+
+  (transport as unknown as {
+    discoverTopology: () => Promise<unknown>;
+  }).discoverTopology = async () => ({
+    capturedAt: new Date().toISOString(),
+    origin: "live",
+    households: [
+      {
+        id: householdId,
+        displayName: "Sonos Household",
+        players: [
+          {
+            id: playerId,
+            name: "Upper Level",
+            model: "Sonos Amp",
+            capabilities: ["PLAYBACK", "LINE_IN"],
+            deviceIds: [playerId],
+            isCoordinator: true,
+            fixedVolume: false,
+            sourceOptions: ["favorite", "line_in"],
+          },
+        ],
+        groups: [
+          {
+            id: "group-upper-level",
+            name: "Upper Level",
+            coordinatorId: playerId,
+            playerIds: [playerId],
+            playbackState: "PLAYBACK_STATE_IDLE",
+          },
+        ],
+        favorites: [],
+      },
+    ],
+  });
+
+  assert.equal(await transport.getPlayerChannelVolume(householdId, playerId, "left"), 23);
+  assert.equal(await transport.getPlayerChannelVolume(householdId, playerId, "right"), 61);
+  assert.equal(await transport.getPlayerChannelMuted(householdId, playerId, "left"), true);
+  assert.equal(await transport.getPlayerChannelMuted(householdId, playerId, "right"), false);
+  assert.deepEqual(calls, ["GetVolume:LF", "GetVolume:RF", "GetMute:LF", "GetMute:RF"]);
+});

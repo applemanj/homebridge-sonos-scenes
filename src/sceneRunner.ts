@@ -76,7 +76,7 @@ export class SceneRunner {
     log("info", `Running scene "${scene.name}" (${trigger}).`);
 
     try {
-      let snapshot = await this.discoveryService.refresh();
+      const snapshot = await this.discoveryService.refresh();
       const validation = validateSceneDefinition(scene, snapshot, this.transport);
       if (!validation.valid) {
         throw new Error(validation.errors.join(" "));
@@ -90,14 +90,11 @@ export class SceneRunner {
 
       if (trigger === "off") {
         await this.executeOff(scene, log);
-        snapshot = await this.discoveryService.refresh();
         log("info", `Scene "${scene.name}" off action complete.`);
         return this.result(true, scene.id, trigger, collector.entries, errors, snapshot);
       }
 
       await this.executeOn(scene, log);
-      snapshot = await this.discoveryService.refresh();
-      this.verifyGrouping(scene, snapshot, log);
       log("info", `Scene "${scene.name}" complete.`);
       return this.result(true, scene.id, trigger, collector.entries, errors, snapshot);
     } catch (error) {
@@ -178,19 +175,29 @@ export class SceneRunner {
       await sleep(scene.settleMs);
     }
 
+    const requestedVolumes = new Map<string, number>();
     if (scene.coordinatorVolume !== undefined) {
-      await this.withRetry(scene, `set coordinator volume ${scene.coordinatorVolume}`, () =>
-        this.transport.setPlayerVolume(scene.householdId, scene.coordinatorPlayerId, scene.coordinatorVolume!),
-      );
-      log("info", `Set coordinator volume: ${scene.coordinatorPlayerId}=${scene.coordinatorVolume}`);
+      requestedVolumes.set(scene.coordinatorPlayerId, scene.coordinatorVolume);
+    }
+    for (const volume of scene.playerVolumes) {
+      requestedVolumes.set(volume.playerId, volume.volume);
     }
 
-    for (const volume of scene.playerVolumes) {
-      await this.withRetry(scene, `set room volume ${volume.playerId}=${volume.volume}`, () =>
-        this.transport.setPlayerVolume(scene.householdId, volume.playerId, volume.volume),
-      );
-      log("info", `Set volume: ${volume.playerId}=${volume.volume}`);
-    }
+    await Promise.all(
+      Array.from(requestedVolumes.entries()).map(async ([playerId, volume]) => {
+        const label = playerId === scene.coordinatorPlayerId && scene.coordinatorVolume !== undefined
+          ? `set coordinator volume ${volume}`
+          : `set room volume ${playerId}=${volume}`;
+        await this.withRetry(scene, label, () =>
+          this.transport.setPlayerVolume(scene.householdId, playerId, volume),
+        );
+        if (playerId === scene.coordinatorPlayerId && scene.coordinatorVolume !== undefined) {
+          log("info", `Set coordinator volume: ${playerId}=${volume}`);
+        } else {
+          log("info", `Set volume: ${playerId}=${volume}`);
+        }
+      }),
+    );
   }
 
   private async executeOff(
@@ -213,36 +220,6 @@ export class SceneRunner {
       );
       log("info", `Ungrouped members: ${scene.memberPlayerIds.join(", ") || "none"}`);
     }
-  }
-
-  private verifyGrouping(
-    scene: SceneDefinition,
-    snapshot: TopologySnapshot,
-    log: (level: "debug" | "info" | "warn" | "error", message: string) => void,
-  ): void {
-    const household = snapshot.households.find((item) => item.id === scene.householdId);
-    if (!household) {
-      log("warn", "Verification skipped because the household is no longer present.");
-      return;
-    }
-
-    const group = household.groups.find((item) => item.coordinatorId === scene.coordinatorPlayerId)
-      ?? household.groups.find((item) => item.playerIds.includes(scene.coordinatorPlayerId));
-
-    if (!group) {
-      log("warn", "Verification could not find the coordinator group after execution.");
-      return;
-    }
-
-    const expectedMembers = new Set([scene.coordinatorPlayerId, ...scene.memberPlayerIds]);
-    const actualMembers = new Set(group.playerIds);
-    const missing = Array.from(expectedMembers).filter((playerId) => !actualMembers.has(playerId));
-    if (missing.length > 0) {
-      log("warn", `Post-run verification is missing grouped members: ${missing.join(", ")}`);
-      return;
-    }
-
-    log("debug", `Post-run verification passed for group ${group.id}.`);
   }
 
   private async withRetry(scene: SceneDefinition, label: string, action: () => Promise<void>): Promise<void> {

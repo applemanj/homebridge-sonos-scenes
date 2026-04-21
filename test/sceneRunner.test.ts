@@ -9,6 +9,7 @@ import type { SceneDefinition, SceneSourceKind, SonosTransport, TopologySnapshot
 class FakeTransport implements SonosTransport {
   readonly kind = "fake";
   readonly calls: string[] = [];
+  discoverCalls = 0;
   private topology: TopologySnapshot = JSON.parse(JSON.stringify(sampleTopology));
   private failSetGroupMembersOnce = true;
 
@@ -24,6 +25,7 @@ class FakeTransport implements SonosTransport {
   }
 
   async discoverTopology(): Promise<TopologySnapshot> {
+    this.discoverCalls += 1;
     return JSON.parse(JSON.stringify(this.topology));
   }
 
@@ -128,13 +130,19 @@ test("SceneRunner executes scene actions in order and retries transient failures
 
   const result = await runner.runOn(scene);
   assert.equal(result.ok, true);
-  assert.deepEqual(transport.calls, [
+  assert.deepEqual(transport.calls.slice(0, 3), [
     "setGroupMembers:RINCON_UPPER_LEVEL:RINCON_PRIMARY_BEDROOM",
     "setGroupMembers:RINCON_UPPER_LEVEL:RINCON_PRIMARY_BEDROOM",
     "loadLineIn:RINCON_UPPER_LEVEL:RINCON_UPPER_LEVEL",
-    "setPlayerVolume:RINCON_UPPER_LEVEL:20",
-    "setPlayerVolume:RINCON_PRIMARY_BEDROOM:16",
   ]);
+  assert.deepEqual(
+    new Set(transport.calls.slice(3)),
+    new Set([
+      "setPlayerVolume:RINCON_UPPER_LEVEL:20",
+      "setPlayerVolume:RINCON_PRIMARY_BEDROOM:16",
+    ]),
+  );
+  assert.equal(transport.discoverCalls, 1);
 });
 
 test("SceneRunner executes the off ungroup action", async () => {
@@ -164,4 +172,5 @@ test("SceneRunner executes the off ungroup action", async () => {
     "stopPlayback:RINCON_UPPER_LEVEL",
     "ungroup:RINCON_UPPER_LEVEL:RINCON_PRIMARY_BEDROOM",
   ]);
+  assert.equal(transport.discoverCalls, 1);
 });

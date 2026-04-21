@@ -46,6 +46,15 @@ interface SonosAudioControls {
   pause(): Promise<void>;
 }
 
+interface SonosChannelRenderingControls {
+  GetVolume(channel?: string): Promise<number>;
+  GetMute(channel?: string): Promise<boolean>;
+}
+
+interface SonosChannelAwareDevice extends SonosAudioControls {
+  renderingControlService(): SonosChannelRenderingControls;
+}
+
 interface FixtureAudioState {
   master: ChannelAudioState;
   left: ChannelAudioState;
@@ -980,7 +989,10 @@ export class LocalSonosTransport implements SonosTransport {
 
   private async getLivePlayerChannelVolume(playerId: string, channel: VirtualRoomChannel): Promise<number> {
     const player = this.requireLiveRecord(playerId);
-    return Math.max(0, Math.min(100, Math.round(await this.audioDevice(player.device).getVolume(channelToken(channel)))));
+    return Math.max(
+      0,
+      Math.min(100, Math.round(await this.channelAwareDevice(player.device).renderingControlService().GetVolume(channelToken(channel)))),
+    );
   }
 
   private async setLivePlayerChannelVolume(
@@ -1004,7 +1016,7 @@ export class LocalSonosTransport implements SonosTransport {
 
   private async getLivePlayerChannelMuted(playerId: string, channel: VirtualRoomChannel): Promise<boolean> {
     const player = this.requireLiveRecord(playerId);
-    return await this.audioDevice(player.device).getMuted(channelToken(channel));
+    return await this.channelAwareDevice(player.device).renderingControlService().GetMute(channelToken(channel));
   }
 
   private async setLivePlayerChannelMuted(
@@ -1142,6 +1154,10 @@ export class LocalSonosTransport implements SonosTransport {
 
   private audioDevice(device: Sonos): Sonos & SonosAudioControls {
     return device as Sonos & SonosAudioControls;
+  }
+
+  private channelAwareDevice(device: Sonos): Sonos & SonosChannelAwareDevice {
+    return device as Sonos & SonosChannelAwareDevice;
   }
 }
 
