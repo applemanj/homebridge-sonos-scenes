@@ -280,3 +280,63 @@ test("SonosScenesPlatform reports effective virtual room volume using the lower 
 
   assert.deepEqual(state, { on: true, volume: 12, muted: false });
 });
+
+test("SonosScenesPlatform restores the configured split trim when muting a virtual room off", async () => {
+  const room = buildVirtualRoom("Kitchen");
+  const calls: string[] = [];
+  const fakePlatform = {
+    getRequiredVirtualRoom: () => room,
+    applyLastActiveBehavior: async () => undefined,
+    readVirtualRoomState: async () => ({ on: false, volume: room.defaultVolume, muted: true }),
+    transport: {
+      setPlayerChannelMuted: async (
+        _householdId: string,
+        _playerId: string,
+        channel: string,
+        muted: boolean,
+      ) => {
+        calls.push(`setPlayerChannelMuted:${channel}:${muted}`);
+      },
+      setPlayerChannelVolume: async (
+        _householdId: string,
+        _playerId: string,
+        channel: string,
+        volume: number,
+      ) => {
+        calls.push(`setPlayerChannelVolume:${channel}:${volume}`);
+      },
+    },
+  } as any;
+
+  const result = await SonosScenesPlatform.prototype.deactivateVirtualRoom.call(fakePlatform, room.id);
+
+  assert.deepEqual(result, { on: false, volume: room.defaultVolume, muted: true });
+  assert.equal(calls.includes("setPlayerChannelMuted:left:true"), true);
+  assert.equal(calls.includes(`setPlayerChannelVolume:left:${room.defaultVolume}`), true);
+});
+
+test("SonosScenesPlatform restore-last activation prefers the cached fallback when the channel is muted", async () => {
+  const room = buildVirtualRoom("Kitchen");
+  const calls: string[] = [];
+  const fakePlatform = {
+    getRequiredVirtualRoom: () => room,
+    readVirtualRoomState: async () => ({ on: true, volume: 41, muted: false }),
+    prepareVirtualRoomPlayback: async (
+      selectedRoom: VirtualRoomDefinition,
+      targetVolume: number,
+      currentMasterVolume: number,
+    ) => {
+      calls.push(`prepare:${selectedRoom.id}:${targetVolume}:${currentMasterVolume}`);
+    },
+    transport: {
+      getPlayerChannelVolume: async () => room.defaultVolume,
+      getPlayerVolume: async () => 20,
+      getPlayerChannelMuted: async () => true,
+    },
+  } as any;
+
+  const result = await SonosScenesPlatform.prototype.activateVirtualRoom.call(fakePlatform, room.id, 41);
+
+  assert.deepEqual(result, { on: true, volume: 41, muted: false });
+  assert.equal(calls.includes(`prepare:${room.id}:41:20`), true);
+});

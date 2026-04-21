@@ -140,9 +140,10 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
 
   async activateVirtualRoom(roomId: string, fallbackVolume?: number): Promise<VirtualRoomState> {
     const room = this.getRequiredVirtualRoom(roomId);
-    const [currentVolume, currentMasterVolume] = await Promise.all([
+    const [currentVolume, currentMasterVolume, channelMuted] = await Promise.all([
       this.transport.getPlayerChannelVolume(room.householdId, room.ampPlayerId, room.channel),
       this.transport.getPlayerVolume(room.householdId, room.ampPlayerId),
+      this.transport.getPlayerChannelMuted(room.householdId, room.ampPlayerId, room.channel),
     ]);
     const targetVolume = Math.max(
       0,
@@ -151,10 +152,12 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
         Math.round(
           room.onBehavior.kind === "default_volume"
             ? room.defaultVolume
-            : currentVolume > 0
+            : !channelMuted && currentVolume > 0
               ? currentVolume
               : fallbackVolume && fallbackVolume > 0
                 ? fallbackVolume
+                : currentVolume > 0
+                  ? currentVolume
                 : room.defaultVolume,
         ),
       ),
@@ -194,10 +197,16 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
     const room = this.getRequiredVirtualRoom(roomId);
 
     if (forceVolumeZero || room.offBehavior.kind === "volume_zero") {
-      await this.transport.setPlayerChannelVolume(room.householdId, room.ampPlayerId, room.channel, 0);
-      await this.transport.setPlayerChannelMuted(room.householdId, room.ampPlayerId, room.channel, false);
+      await Promise.all([
+        this.transport.setPlayerChannelVolume(room.householdId, room.ampPlayerId, room.channel, 0),
+        this.transport.setPlayerChannelMuted(room.householdId, room.ampPlayerId, room.channel, false),
+      ]);
     } else {
-      await this.transport.setPlayerChannelMuted(room.householdId, room.ampPlayerId, room.channel, true);
+      const resetVolume = Math.max(0, Math.min(room.maxVolume, room.defaultVolume));
+      await Promise.all([
+        this.transport.setPlayerChannelMuted(room.householdId, room.ampPlayerId, room.channel, true),
+        this.transport.setPlayerChannelVolume(room.householdId, room.ampPlayerId, room.channel, resetVolume),
+      ]);
     }
 
     await this.applyLastActiveBehavior(room);
