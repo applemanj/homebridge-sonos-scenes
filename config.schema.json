@@ -3,8 +3,8 @@
   "pluginType": "platform",
   "singular": true,
   "customUi": true,
-  "headerDisplay": "Discovery-driven Sonos workflow scenes for Homebridge.",
-  "footerDisplay": "Use the custom UI to discover players, validate scenes, and test execution.",
+  "headerDisplay": "Discovery-driven Sonos scenes and Amp virtual rooms for Homebridge.",
+  "footerDisplay": "Use the custom UI to discover players, validate scenes, test execution, and manage virtual rooms.",
   "schema": {
     "type": "object",
     "properties": {

@@ -1,8 +1,8 @@
-# Virtual Rooms Draft
+# Virtual Rooms
 
-This document sketches a possible config shape for exposing the left and right outputs of a single Sonos Amp as separate HomeKit accessories.
+This document describes the config shape and runtime model for exposing the left and right outputs of a single Sonos Amp as separate HomeKit accessories.
 
-The user-facing concept is a `virtual room`. Internally, the runtime would likely model these as channel-aware virtual accessories backed by one physical Amp.
+The user-facing concept is a `virtual room`. Internally, the runtime models these as channel-aware virtual accessories backed by one physical Amp.
 
 ## Goal
 
@@ -13,7 +13,7 @@ Support setups where one Sonos Amp feeds speakers in two physical rooms, for exa
 
 Both sides still share the same Sonos playback source. The feature is only about per-side `on/off` and per-side volume-style control.
 
-## Recommended v1 Shape
+## Config Shape
 
 Recommended top-level key:
 
@@ -151,9 +151,9 @@ The validator should enforce at least:
 - `defaultVolume` and `maxVolume` must stay within `0-100`
 - if both `defaultVolume` and `maxVolume` are set, `defaultVolume` must not exceed `maxVolume`
 
-## Runtime Notes
+## Runtime Model
 
-The runtime would likely map these controls as follows:
+The runtime maps these controls as follows:
 
 - room `on`: unmute the room's channel and restore a volume
 - room `off`: mute the room's channel
@@ -165,9 +165,9 @@ Important constraints:
 - HomeKit state may need to be partly optimistic if Sonos events do not report left/right channel state with the same fidelity as master volume/mute
 - master volume changes from outside the plugin can still affect the perceived loudness of both virtual rooms
 
-## Open Questions
+## Future Ideas
 
-- Should `off` always mean `mute`, or should we ever drive channel volume to `0` instead?
-- Should the feature expose a companion volume accessory, like scenes do today, or a single combined accessory with `On` and `Brightness`?
-- Do we want a per-Amp shared config object later for policies like `lastActiveBehavior`?
-- Should v1 support creating only one side of an Amp, or require both `left` and `right` to be configured together?
+- supporting `volume_zero` as the default off behavior instead of `mute`
+- exposing a dedicated companion volume accessory instead of relying on a single combined `On` and `Brightness` accessory
+- moving shared policies such as `lastActiveBehavior` to a per-Amp config object
+- requiring paired `left` and `right` room definitions for some installations
