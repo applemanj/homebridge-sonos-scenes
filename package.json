@@ -1,6 +1,6 @@
 {
   "name": "homebridge-sonos-scenes",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "Homebridge plugin for Sonos workflow scenes and orchestration.",
   "author": "applemanj",
   "homepage": "https://github.com/applemanj/homebridge-sonos-scenes#readme",
@@ -18,7 +18,7 @@
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
     "prepare": "npm run build",
     "prepack": "npm run clean && npm run build",
-    "test": "npm run build && node --test dist/test/config.test.js dist/test/localTransport.test.js dist/test/sceneRunner.test.js dist/test/validation.test.js"
+    "test": "npm run build && node --test dist/test/accessories.test.js dist/test/config.test.js dist/test/localTransport.test.js dist/test/sceneRunner.test.js dist/test/validation.test.js"
   },
   "files": [
     "dist/src",

@@ -19,7 +19,7 @@ export class SceneSwitchAccessory {
 
     this.service =
       this.accessory.getService(this.platform.Service.Switch) ?? this.accessory.addService(this.platform.Service.Switch);
-    this.service.setCharacteristic(this.platform.Characteristic.Name, scene.name);
+    this.syncServiceName(scene.name);
     this.service.getCharacteristic(this.platform.Characteristic.On)
       .onGet(this.handleOnGet.bind(this))
       .onSet(this.handleOnSet.bind(this));
@@ -38,7 +38,12 @@ export class SceneSwitchAccessory {
     this.scene = scene;
     this.accessory.context.sceneId = scene.id;
     this.accessory.displayName = scene.name;
-    this.service.setCharacteristic(this.platform.Characteristic.Name, scene.name);
+    this.syncServiceName(scene.name);
+  }
+
+  private syncServiceName(name: string): void {
+    this.service.setCharacteristic(this.platform.Characteristic.Name, name);
+    this.service.setCharacteristic(this.platform.Characteristic.ConfiguredName, name);
   }
 
   private handleOnGet(): CharacteristicValue {

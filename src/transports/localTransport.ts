@@ -96,6 +96,10 @@ function buildFavoriteContainerUri(metadata: string): string | undefined {
   return `x-rincon-cpcontainer:${metadataItemId}`;
 }
 
+function favoriteMetadataClass(metadata: string | undefined): string | undefined {
+  return metadata ? extractTagValue(metadata, "upnp:class")?.toLowerCase() : undefined;
+}
+
 export function buildFavoriteTransportUri(favorite: Pick<SonosFavorite, "uri" | "metadata">): string | undefined {
   if (favorite.uri?.trim()) {
     return decodeXmlEntities(favorite.uri).trim();
@@ -108,7 +112,15 @@ export function buildFavoriteTransportUri(favorite: Pick<SonosFavorite, "uri" | 
   return buildFavoriteContainerUri(favorite.metadata);
 }
 
-function favoriteUnsupportedReason(favorite: Pick<SonosFavorite, "uri" | "playbackType" | "description">): string | undefined {
+function favoriteUnsupportedReason(
+  favorite: Pick<SonosFavorite, "uri" | "metadata" | "playbackType" | "description">,
+): string | undefined {
+  const metadataClass = favoriteMetadataClass(favorite.metadata);
+
+  if (metadataClass?.includes("playlistcontainer")) {
+    return `Favorite "${favorite.description?.toLowerCase() || "playlist"}" playlists are not playable through the local transport yet. Pick line-in or a directly playable favorite instead.`;
+  }
+
   if (favorite.uri?.trim()) {
     return undefined;
   }

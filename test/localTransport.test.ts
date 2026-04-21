@@ -20,6 +20,14 @@ const rawFavoriteBrowseXml = `
       <r:description>Artist</r:description>
       <r:resMD>&lt;DIDL-Lite xmlns:dc=&quot;http://purl.org/dc/elements/1.1/&quot; xmlns:upnp=&quot;urn:schemas-upnp-org:metadata-1-0/upnp/&quot; xmlns:r=&quot;urn:schemas-rinconnetworks-com:metadata-1-0/&quot; xmlns=&quot;urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/&quot;&gt;&lt;item id=&quot;10052064artist%3a1314005644&quot; parentID=&quot;10052064artist%3a1314005644&quot; restricted=&quot;true&quot;&gt;&lt;dc:title&gt;The Hipster Orchestra&lt;/dc:title&gt;&lt;upnp:class&gt;object.container.person.musicArtist&lt;/upnp:class&gt;&lt;desc id=&quot;cdudn&quot; nameSpace=&quot;urn:schemas-rinconnetworks-com:metadata-1-0/&quot;&gt;SA_RINCON52231_X_#Svc52231-0-Token&lt;/desc&gt;&lt;/item&gt;&lt;/DIDL-Lite&gt;</r:resMD>
     </item>
+    <item id="FV:2/13" parentID="FV:2" restricted="false">
+      <dc:title>Lo-Fi Sunday</dc:title>
+      <upnp:class>object.itemobject.item.sonos-favorite</upnp:class>
+      <res protocolInfo="x-rincon-cpcontainer:*:*:*">x-rincon-cpcontainer:1006206cplaylist%3Apl.7525e7e5e04f44269ce48ae05d39d209?sid=204&amp;flags=8300&amp;sn=18</res>
+      <r:type>instantPlay</r:type>
+      <r:description>Apple Music</r:description>
+      <r:resMD>&lt;DIDL-Lite xmlns:dc=&quot;http://purl.org/dc/elements/1.1/&quot; xmlns:upnp=&quot;urn:schemas-upnp-org:metadata-1-0/upnp/&quot; xmlns:r=&quot;urn:schemas-rinconnetworks-com:metadata-1-0/&quot; xmlns=&quot;urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/&quot;&gt;&lt;item id=&quot;1006206cplaylist%3Apl.7525e7e5e04f44269ce48ae05d39d209&quot; parentID=&quot;1006206cplaylist%3Apl.7525e7e5e04f44269ce48ae05d39d209&quot; restricted=&quot;true&quot;&gt;&lt;dc:title&gt;Lo-Fi Sunday&lt;/dc:title&gt;&lt;upnp:class&gt;object.container.playlistContainer&lt;/upnp:class&gt;&lt;desc id=&quot;cdudn&quot; nameSpace=&quot;urn:schemas-rinconnetworks-com:metadata-1-0/&quot;&gt;SA_RINCON52231_X_#Svc52231-323b073d-Token&lt;/desc&gt;&lt;/item&gt;&lt;/DIDL-Lite&gt;</r:resMD>
+    </item>
   </DIDL-Lite>
 `;
 
@@ -53,4 +61,17 @@ test("buildFavoriteTransportUri derives container URIs for shortcut favorites", 
   );
   assert.equal(shortcutFavorite.transportUri, "x-rincon-cpcontainer:10052064artist%3a1314005644");
   assert.match(shortcutFavorite.metadata ?? "", /object\.container\.person\.musicArtist/);
+});
+
+test("parseFavoriteBrowseXml marks playlist-container favorites as not playable locally", () => {
+  const favorites = parseFavoriteBrowseXml(rawFavoriteBrowseXml);
+  const playlistFavorite = favorites.find((favorite) => favorite.id === "2/13");
+
+  assert.ok(playlistFavorite);
+  assert.equal(playlistFavorite.name, "Lo-Fi Sunday");
+  assert.equal(playlistFavorite.description, "Apple Music");
+  assert.equal(playlistFavorite.playbackType, "instantPlay");
+  assert.equal(playlistFavorite.playable, false);
+  assert.match(playlistFavorite.unsupportedReason ?? "", /not playable through the local transport yet/i);
+  assert.match(playlistFavorite.metadata ?? "", /object\.container\.playlistContainer/);
 });

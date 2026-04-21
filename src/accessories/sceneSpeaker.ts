@@ -36,7 +36,7 @@ export class SceneSpeakerAccessory {
       this.service.addCharacteristic(this.platform.Characteristic.Brightness);
     }
 
-    this.service.setCharacteristic(this.platform.Characteristic.Name, this.displayNameFor(scene));
+    this.syncServiceName(this.displayNameFor(scene));
     this.service.setCharacteristic(this.platform.Characteristic.On, this.isOn());
     this.service.setCharacteristic(this.platform.Characteristic.Brightness, this.lastKnownVolume);
     this.service.getCharacteristic(this.platform.Characteristic.On)
@@ -68,13 +68,18 @@ export class SceneSpeakerAccessory {
     this.accessory.context.sceneId = scene.id;
     this.accessory.context.kind = "volume";
     this.accessory.displayName = this.displayNameFor(scene);
-    this.service.setCharacteristic(this.platform.Characteristic.Name, this.displayNameFor(scene));
+    this.syncServiceName(this.displayNameFor(scene));
     this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
     this.service.updateCharacteristic(this.platform.Characteristic.Brightness, this.lastKnownVolume);
   }
 
   private displayNameFor(scene: SceneDefinition): string {
     return `${scene.name} Volume`;
+  }
+
+  private syncServiceName(name: string): void {
+    this.service.setCharacteristic(this.platform.Characteristic.Name, name);
+    this.service.setCharacteristic(this.platform.Characteristic.ConfiguredName, name);
   }
 
   private handleBrightnessGet(): CharacteristicValue {
