@@ -880,10 +880,10 @@
           <div class="col-md-8">
             <label class="form-label" for="source-target">
               <span class="scene-label-row">
-                <span>Source Target</span>
+                <span id="source-target-label">Source Target</span>
                 <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Source Target">
                   ?
-                  <span class="scene-tooltip">The specific favorite or input to load when the scene starts. This list depends on the source kind you selected.</span>
+                  <span class="scene-tooltip" id="source-target-tooltip">The specific favorite or input to load when the scene starts. This list depends on the source kind you selected.</span>
                 </span>
               </span>
             </label>
@@ -966,7 +966,7 @@
         <div class="scene-inline-note mt-2">Virtual rooms share one playback source. This editor is for per-side on/off, channel volume, and last-room-off behavior.</div>
       </div>
       <div class="scene-section-actions">
-        <button class="btn btn-sm btn-outline-primary" id="new-virtual-room-button" type="button">New Virtual Room</button>
+        <button class="btn btn-sm btn-outline-primary" id="new-virtual-room-button" type="button">New Virtual Room Pair</button>
       </div>
     </div>
     <div class="card-body">
@@ -975,30 +975,43 @@
         <div id="virtual-room-editor-panel" class="scene-editor-shell">
           <div class="scene-editor-header">
             <div class="scene-editor-copy">
-              <strong id="virtual-room-editor-current" class="scene-editor-current">Virtual Room Settings: New Virtual Room</strong>
-              <div class="scene-help">Pick one Amp, choose left or right, then define how that side should behave when HomeKit turns it on or off.</div>
-              <div class="scene-inline-note">The expanded virtual room above is the one you are editing here.</div>
+              <strong id="virtual-room-editor-current" class="scene-editor-current">Virtual Room Pair: New Virtual Rooms</strong>
+              <div class="scene-help">Pick one Amp, name both the left and right sides, then define the shared behavior those two virtual room accessories should use in HomeKit.</div>
+              <div class="scene-inline-note">The expanded virtual room pair above is the one you are editing here.</div>
             </div>
             <div class="scene-section-actions">
-              <button class="btn btn-sm btn-outline-primary" id="validate-virtual-room-button" type="button">Validate Virtual Room</button>
-              <button class="btn btn-sm btn-outline-danger" id="delete-virtual-room-button" type="button">Delete</button>
-              <button class="btn btn-sm btn-primary" id="save-virtual-room-button" type="button">Save Virtual Room Changes</button>
+              <button class="btn btn-sm btn-outline-primary" id="validate-virtual-room-button" type="button">Validate Pair</button>
+              <button class="btn btn-sm btn-outline-danger" id="delete-virtual-room-button" type="button">Delete Pair</button>
+              <button class="btn btn-sm btn-primary" id="save-virtual-room-button" type="button">Save Virtual Room Pair</button>
             </div>
           </div>
           <div class="row g-3">
-            <div class="col-12">
-              <label class="form-label" for="virtual-room-name">
+            <div class="col-md-6">
+              <label class="form-label" for="virtual-room-left-name">
                 <span class="scene-label-row">
-                  <span>Virtual Room Name</span>
-                  <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Virtual Room Name">
+                  <span>Left Channel Name</span>
+                  <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Left Channel Name">
                     ?
-                    <span class="scene-tooltip">The friendly name shown for this channel-backed accessory in HomeKit, such as "Primary Bathroom Ceiling".</span>
+                    <span class="scene-tooltip">The friendly HomeKit name for the left-side accessory, such as "Living Room Left".</span>
                   </span>
                 </span>
               </label>
-              <input class="form-control" id="virtual-room-name" type="text">
+              <input class="form-control" id="virtual-room-left-name" type="text">
             </div>
-            <input id="virtual-room-id" type="hidden">
+            <div class="col-md-6">
+              <label class="form-label" for="virtual-room-right-name">
+                <span class="scene-label-row">
+                  <span>Right Channel Name</span>
+                  <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Right Channel Name">
+                    ?
+                    <span class="scene-tooltip">The friendly HomeKit name for the right-side accessory, such as "Living Room Right".</span>
+                  </span>
+                </span>
+              </label>
+              <input class="form-control" id="virtual-room-right-name" type="text">
+            </div>
+            <input id="virtual-room-left-id" type="hidden">
+            <input id="virtual-room-right-id" type="hidden">
             <div class="col-md-6">
               <label class="form-label" for="virtual-room-household-select">
                 <span class="scene-label-row">
@@ -1023,21 +1036,6 @@
               </label>
               <select class="form-select" id="virtual-room-amp-player-select"></select>
               <div id="virtual-room-amp-note" class="scene-inline-note mt-2">Choose an Amp-like player to target left and right channels.</div>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label" for="virtual-room-channel">
-                <span class="scene-label-row">
-                  <span>Channel</span>
-                  <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Channel">
-                    ?
-                    <span class="scene-tooltip">The physical output side this virtual room controls. Left and right can each become their own HomeKit accessory.</span>
-                  </span>
-                </span>
-              </label>
-              <select class="form-select" id="virtual-room-channel">
-                <option value="left">Left</option>
-                <option value="right">Right</option>
-              </select>
             </div>
             <div class="col-md-4">
               <label class="form-label" for="virtual-room-default-volume">
@@ -1172,6 +1170,8 @@
       memberList: document.getElementById("member-list"),
       sourceKind: document.getElementById("source-kind"),
       sourceTarget: document.getElementById("source-target"),
+      sourceTargetLabel: document.getElementById("source-target-label"),
+      sourceTargetTooltip: document.getElementById("source-target-tooltip"),
       settleMs: document.getElementById("settle-ms"),
       retryCount: document.getElementById("retry-count"),
       retryDelayMs: document.getElementById("retry-delay-ms"),
@@ -1204,12 +1204,13 @@
       virtualRoomEditorParking: document.getElementById("virtual-room-editor-parking"),
       virtualRoomEditorPanel: document.getElementById("virtual-room-editor-panel"),
       virtualRoomEditorCurrent: document.getElementById("virtual-room-editor-current"),
-      virtualRoomName: document.getElementById("virtual-room-name"),
-      virtualRoomId: document.getElementById("virtual-room-id"),
+      virtualRoomLeftName: document.getElementById("virtual-room-left-name"),
+      virtualRoomRightName: document.getElementById("virtual-room-right-name"),
+      virtualRoomLeftId: document.getElementById("virtual-room-left-id"),
+      virtualRoomRightId: document.getElementById("virtual-room-right-id"),
       virtualRoomHouseholdSelect: document.getElementById("virtual-room-household-select"),
       virtualRoomAmpPlayerSelect: document.getElementById("virtual-room-amp-player-select"),
       virtualRoomAmpNote: document.getElementById("virtual-room-amp-note"),
-      virtualRoomChannel: document.getElementById("virtual-room-channel"),
       virtualRoomDefaultVolume: document.getElementById("virtual-room-default-volume"),
       virtualRoomMaxVolume: document.getElementById("virtual-room-max-volume"),
       virtualRoomOnBehavior: document.getElementById("virtual-room-on-behavior"),
@@ -1333,6 +1334,127 @@
       };
     }
 
+    function buildVirtualRoomPairKey(householdId, ampPlayerId) {
+      return householdId && ampPlayerId ? `${householdId}::${ampPlayerId}` : "";
+    }
+
+    function normalizeVirtualRoomPair(pair) {
+      const safePair = pair || {};
+      const seedRoom = normalizeVirtualRoom({
+        householdId: safePair.householdId || safePair.left?.householdId || safePair.right?.householdId,
+        ampPlayerId: safePair.ampPlayerId || safePair.left?.ampPlayerId || safePair.right?.ampPlayerId,
+        defaultVolume: safePair.defaultVolume ?? safePair.left?.defaultVolume ?? safePair.right?.defaultVolume,
+        maxVolume: safePair.maxVolume ?? safePair.left?.maxVolume ?? safePair.right?.maxVolume,
+        onBehavior: safePair.onBehavior ?? safePair.left?.onBehavior ?? safePair.right?.onBehavior,
+        offBehavior: safePair.offBehavior ?? safePair.left?.offBehavior ?? safePair.right?.offBehavior,
+        lastActiveBehavior: safePair.lastActiveBehavior ?? safePair.left?.lastActiveBehavior ?? safePair.right?.lastActiveBehavior,
+      });
+
+      return {
+        pairId: String(safePair.pairId || buildVirtualRoomPairKey(seedRoom.householdId, seedRoom.ampPlayerId) || randomId()),
+        householdId: seedRoom.householdId,
+        ampPlayerId: seedRoom.ampPlayerId,
+        left: {
+          id: String(safePair.left?.id || randomId()),
+          name: String(safePair.left?.name || ""),
+        },
+        right: {
+          id: String(safePair.right?.id || randomId()),
+          name: String(safePair.right?.name || ""),
+        },
+        defaultVolume: seedRoom.defaultVolume,
+        maxVolume: seedRoom.maxVolume,
+        onBehavior: clone(seedRoom.onBehavior),
+        offBehavior: clone(seedRoom.offBehavior),
+        lastActiveBehavior: clone(seedRoom.lastActiveBehavior),
+      };
+    }
+
+    function getVirtualRoomPairRooms(pair) {
+      const draft = normalizeVirtualRoomPair(pair);
+      const shared = {
+        householdId: draft.householdId,
+        ampPlayerId: draft.ampPlayerId,
+        defaultVolume: draft.defaultVolume,
+        maxVolume: draft.maxVolume,
+        onBehavior: draft.onBehavior,
+        offBehavior: draft.offBehavior,
+        lastActiveBehavior: draft.lastActiveBehavior,
+      };
+
+      return [
+        normalizeVirtualRoom({
+          ...shared,
+          id: draft.left.id,
+          name: draft.left.name.trim(),
+          channel: "left",
+        }),
+        normalizeVirtualRoom({
+          ...shared,
+          id: draft.right.id,
+          name: draft.right.name.trim(),
+          channel: "right",
+        }),
+      ];
+    }
+
+    function pairHasRequiredNames(pair) {
+      const draft = normalizeVirtualRoomPair(pair);
+      return draft.left.name.trim().length > 0 && draft.right.name.trim().length > 0;
+    }
+
+    function getVirtualRoomPairHeading(pair) {
+      const draft = normalizeVirtualRoomPair(pair);
+      const names = [draft.left.name.trim(), draft.right.name.trim()].filter(Boolean);
+      return names.length > 0 ? names.join(" + ") : "New Virtual Rooms";
+    }
+
+    function getVirtualRoomPairSummary(pair) {
+      const draft = normalizeVirtualRoomPair(pair);
+      const leftName = draft.left.name.trim() || "Left Unnamed";
+      const rightName = draft.right.name.trim() || "Right Unnamed";
+      return `Left: ${leftName} • Right: ${rightName}`;
+    }
+
+    function listSavedVirtualRoomPairs() {
+      const pairs = new Map();
+
+      for (const room of state.config.virtualRooms || []) {
+        const key = buildVirtualRoomPairKey(room.householdId, room.ampPlayerId) || room.id;
+        if (!pairs.has(key)) {
+          pairs.set(key, {
+            pairId: key,
+            householdId: room.householdId,
+            ampPlayerId: room.ampPlayerId,
+            left: { id: "", name: "" },
+            right: { id: "", name: "" },
+            defaultVolume: room.defaultVolume,
+            maxVolume: room.maxVolume,
+            onBehavior: room.onBehavior,
+            offBehavior: room.offBehavior,
+            lastActiveBehavior: room.lastActiveBehavior,
+          });
+        }
+
+        const pair = pairs.get(key);
+        pair.householdId = pair.householdId || room.householdId;
+        pair.ampPlayerId = pair.ampPlayerId || room.ampPlayerId;
+        pair.defaultVolume = room.defaultVolume;
+        pair.maxVolume = room.maxVolume;
+        pair.onBehavior = room.onBehavior;
+        pair.offBehavior = room.offBehavior;
+        pair.lastActiveBehavior = room.lastActiveBehavior;
+
+        if (room.channel === "right") {
+          pair.right = { id: room.id, name: room.name };
+        } else {
+          pair.left = { id: room.id, name: room.name };
+        }
+      }
+
+      return Array.from(pairs.values()).map((pair) => normalizeVirtualRoomPair(pair));
+    }
+
     function resetVolumeUiFromDraft() {
       const memberEnabled = {};
       for (const entry of state.draft?.playerVolumes || []) {
@@ -1350,8 +1472,18 @@
     }
 
     function updateVirtualRoomEditorHeading() {
-      const name = (elements.virtualRoomName?.value || state.virtualRoomDraft?.name || "New Virtual Room").trim() || "New Virtual Room";
-      elements.virtualRoomEditorCurrent.textContent = `Virtual Room Settings: ${name}`;
+      const name = getVirtualRoomPairHeading({
+        ...state.virtualRoomDraft,
+        left: {
+          ...(state.virtualRoomDraft?.left || {}),
+          name: elements.virtualRoomLeftName?.value ?? state.virtualRoomDraft?.left?.name,
+        },
+        right: {
+          ...(state.virtualRoomDraft?.right || {}),
+          name: elements.virtualRoomRightName?.value ?? state.virtualRoomDraft?.right?.name,
+        },
+      });
+      elements.virtualRoomEditorCurrent.textContent = `Virtual Room Pair: ${name}`;
     }
 
     function draftExistsInConfig() {
@@ -1362,10 +1494,11 @@
     }
 
     function virtualRoomDraftExistsInConfig() {
-      if (!state.virtualRoomDraft?.id) {
+      if (!state.virtualRoomDraft) {
         return false;
       }
-      return state.config.virtualRooms.some((room) => room.id === state.virtualRoomDraft.id);
+      const roomIds = [state.virtualRoomDraft.left?.id, state.virtualRoomDraft.right?.id].filter(Boolean);
+      return state.config.virtualRooms.some((room) => roomIds.includes(room.id));
     }
 
     function getAccordionChevronMarkup(isActive) {
@@ -1383,7 +1516,7 @@
       if (!state.topology) {
         return null;
       }
-      return state.topology.households.find((household) => household.id === state.virtualRoomDraft.householdId) || state.topology.households[0] || null;
+      return state.topology.households.find((household) => household.id === state.virtualRoomDraft?.householdId) || state.topology.households[0] || null;
     }
 
     function getPlayerName(playerId) {
@@ -1484,16 +1617,22 @@
       }
       serializeCloudConfig();
       const draft = clone(state.virtualRoomDraft);
-      draft.name = elements.virtualRoomName.value.trim() || "New Virtual Room";
       draft.householdId = elements.virtualRoomHouseholdSelect.value;
       draft.ampPlayerId = elements.virtualRoomAmpPlayerSelect.value;
-      draft.channel = elements.virtualRoomChannel.value === "right" ? "right" : "left";
+      draft.left = {
+        id: elements.virtualRoomLeftId.value || draft.left?.id || randomId(),
+        name: elements.virtualRoomLeftName.value.trim(),
+      };
+      draft.right = {
+        id: elements.virtualRoomRightId.value || draft.right?.id || randomId(),
+        name: elements.virtualRoomRightName.value.trim(),
+      };
       draft.defaultVolume = Number(elements.virtualRoomDefaultVolume.value || 0);
       draft.maxVolume = Number(elements.virtualRoomMaxVolume.value || 0);
       draft.onBehavior = { kind: elements.virtualRoomOnBehavior.value };
       draft.offBehavior = { kind: elements.virtualRoomOffBehavior.value };
       draft.lastActiveBehavior = { kind: elements.virtualRoomLastActiveBehavior.value };
-      state.virtualRoomDraft = normalizeVirtualRoom(draft);
+      state.virtualRoomDraft = normalizeVirtualRoomPair(draft);
       return clone(state.virtualRoomDraft);
     }
 
@@ -1606,9 +1745,10 @@
     function renderVirtualRoomList() {
       elements.virtualRoomEditorParking.appendChild(elements.virtualRoomEditorPanel);
       elements.virtualRoomList.innerHTML = "";
+      const savedPairs = listSavedVirtualRoomPairs();
       const showDraftRow = Boolean(state.virtualRoomDraft && !virtualRoomDraftExistsInConfig());
 
-      if (state.config.virtualRooms.length === 0 && !showDraftRow) {
+      if (savedPairs.length === 0 && !showDraftRow) {
         const empty = document.createElement("div");
         empty.className = "scene-help";
         empty.textContent = "No virtual rooms configured. Most systems can leave this section empty unless you want to split a Sonos Amp into separate left and right HomeKit accessories.";
@@ -1617,7 +1757,7 @@
       }
 
       const renderVirtualRoomItem = (room, options = {}) => {
-        const isActive = room.id === state.activeVirtualRoomId;
+        const isActive = room.pairId === state.activeVirtualRoomId;
         const item = document.createElement("section");
         item.className = `scene-accordion-item${isActive ? " active" : ""}`;
 
@@ -1631,22 +1771,23 @@
         trigger.innerHTML = `
           <div class="scene-accordion-copy">
             ${kicker}
-            <strong>${room.name}</strong>
-            <div class="scene-help">${getHouseholdDisplayName(room.householdId)} - ${ampName} - ${room.channel === "right" ? "Right Channel" : "Left Channel"}</div>
+            <strong>${getVirtualRoomPairHeading(room)}</strong>
+            <div class="scene-help">${getHouseholdDisplayName(room.householdId)} - ${ampName}</div>
+            <div class="scene-help">${getVirtualRoomPairSummary(room)}</div>
           </div>
           <span class="scene-accordion-chevron" aria-hidden="true">${getAccordionChevronMarkup(isActive)}</span>
         `;
         trigger.addEventListener("click", () => {
-          if (state.activeVirtualRoomId === room.id) {
+          if (state.activeVirtualRoomId === room.pairId) {
             state.activeVirtualRoomId = null;
-            state.virtualRoomDraft = normalizeVirtualRoom(room);
+            state.virtualRoomDraft = normalizeVirtualRoomPair(room);
             state.virtualRoomValidation = null;
             render();
             return;
           }
 
-          state.activeVirtualRoomId = room.id;
-          state.virtualRoomDraft = normalizeVirtualRoom(room);
+          state.activeVirtualRoomId = room.pairId;
+          state.virtualRoomDraft = normalizeVirtualRoomPair(room);
           state.virtualRoomValidation = null;
           render();
         });
@@ -1666,14 +1807,14 @@
         renderVirtualRoomItem(state.virtualRoomDraft, { isDraft: true });
       }
 
-      state.config.virtualRooms.forEach((room) => {
-        renderVirtualRoomItem(room);
+      savedPairs.forEach((pair) => {
+        renderVirtualRoomItem(pair);
       });
 
-      if (!state.activeVirtualRoomId && state.config.virtualRooms.length > 0 && !showDraftRow) {
+      if (!state.activeVirtualRoomId && savedPairs.length > 0 && !showDraftRow) {
         const note = document.createElement("div");
         note.className = "scene-help";
-        note.textContent = "Select a virtual room to expand its settings.";
+        note.textContent = "Select a virtual room pair to expand its settings.";
         elements.virtualRoomList.appendChild(note);
       }
     }
@@ -1782,8 +1923,10 @@
 
     function renderVirtualRoomHouseholdOptions() {
       const households = state.topology?.households || [];
-      const currentId = state.virtualRoomDraft.householdId || state.config.defaultHouseholdId || households[0]?.id || "";
-      state.virtualRoomDraft.householdId = currentId;
+      const currentId = state.virtualRoomDraft?.householdId || state.config.defaultHouseholdId || households[0]?.id || "";
+      if (state.virtualRoomDraft) {
+        state.virtualRoomDraft.householdId = currentId;
+      }
       elements.virtualRoomHouseholdSelect.innerHTML = households
         .map((household) => `<option value="${household.id}" ${household.id === currentId ? "selected" : ""}>${household.displayName}</option>`)
         .join("");
@@ -1799,24 +1942,33 @@
         }
         return (left.name || "").localeCompare(right.name || "");
       });
+      const compatiblePlayers = sortedPlayers.filter((player) => looksLikeAmpPlayer(player));
 
-      const currentPlayerId = sortedPlayers.some((player) => player.id === state.virtualRoomDraft.ampPlayerId)
+      const currentPlayerId = sortedPlayers.some((player) => player.id === state.virtualRoomDraft?.ampPlayerId)
         ? state.virtualRoomDraft.ampPlayerId
-        : (sortedPlayers.find((player) => looksLikeAmpPlayer(player)) || sortedPlayers[0])?.id || "";
-      state.virtualRoomDraft.ampPlayerId = currentPlayerId;
+        : compatiblePlayers[0]?.id || "";
+      if (state.virtualRoomDraft) {
+        state.virtualRoomDraft.ampPlayerId = currentPlayerId;
+      }
 
       elements.virtualRoomAmpPlayerSelect.innerHTML = sortedPlayers.length > 0
         ? sortedPlayers
             .map((player) => {
-              const ampTag = looksLikeAmpPlayer(player) ? " - Recommended" : "";
-              return `<option value="${player.id}" ${player.id === currentPlayerId ? "selected" : ""}>${getPlayerDisplayLabel(player)}${ampTag}</option>`;
+              const compatible = looksLikeAmpPlayer(player);
+              const ampTag = compatible ? " - Recommended" : " - Incompatible";
+              const selected = player.id === currentPlayerId ? "selected" : "";
+              const disabled = compatible ? "" : "disabled";
+              return `<option value="${player.id}" ${selected} ${disabled}>${getPlayerDisplayLabel(player)}${ampTag}</option>`;
             })
             .join("")
         : `<option value="">No players available</option>`;
 
       const selectedPlayer = sortedPlayers.find((player) => player.id === currentPlayerId);
       if (!selectedPlayer) {
-        elements.virtualRoomAmpNote.innerHTML = `<span class="scene-help">No discovered players are available in this household yet. Run Discover first.</span>`;
+        const noCompatiblePlayers = sortedPlayers.length > 0 && compatiblePlayers.length === 0;
+        elements.virtualRoomAmpNote.innerHTML = noCompatiblePlayers
+          ? `<span class="scene-status-pill pending">No Compatible Amp</span> <span class="scene-help">No discovered players in this household currently look like a Sonos Amp, so virtual room pairing is unavailable here.</span>`
+          : `<span class="scene-help">No discovered players are available in this household yet. Run Discover first.</span>`;
         return;
       }
 
@@ -1825,7 +1977,7 @@
         return;
       }
 
-      elements.virtualRoomAmpNote.innerHTML = `<span class="scene-status-pill pending">Non-Amp</span> <span class="scene-help">${getPlayerDisplayLabel(selectedPlayer)} is not modeled as a Sonos Amp. You can still save it, but left/right channel control is intended for Amp-style outputs.</span>`;
+      elements.virtualRoomAmpNote.innerHTML = `<span class="scene-status-pill pending">Non-Amp</span> <span class="scene-help">${getPlayerDisplayLabel(selectedPlayer)} is not modeled as a Sonos Amp. Incompatible players stay visible here for reference, but only Amp-like players can be selected for virtual rooms.</span>`;
     }
 
     function renderMemberOptions() {
@@ -1933,6 +2085,27 @@
       state.draft.source = state.draft.source || { kind: sourceKind, favoriteId: "" };
       state.draft.source.kind = sourceKind;
 
+      const sourceTargetUi = {
+        favorite: {
+          label: "Favorite",
+          tooltip: "The specific Sonos favorite to load when the scene starts.",
+        },
+        line_in: {
+          label: "Line-In Source",
+          tooltip: "Choose the Sonos player that physically owns the line-in jack you want to play. The selected scene rooms will then join that source.",
+        },
+        tv: {
+          label: "TV Source",
+          tooltip: "Choose the Sonos player that owns the TV input you want this scene to use. The selected scene rooms will then join that source.",
+        },
+      };
+      const activeSourceTargetUi = sourceTargetUi[sourceKind] || {
+        label: "Source Target",
+        tooltip: "The specific favorite or input to load when the scene starts. This list depends on the source kind you selected.",
+      };
+      elements.sourceTargetLabel.textContent = activeSourceTargetUi.label;
+      elements.sourceTargetTooltip.textContent = activeSourceTargetUi.tooltip;
+
       elements.sourceKind.innerHTML = supportedKinds
         .map((kind) => `<option value="${kind}" ${kind === sourceKind ? "selected" : ""}>${kind.replace("_", " ")}</option>`)
         .join("");
@@ -2014,7 +2187,7 @@
 
     function renderVirtualRoomValidation() {
       if (!state.virtualRoomValidation) {
-        elements.virtualRoomValidationOutput.innerHTML = `<div class="scene-help">Run virtual room validation to check the selected household, Amp target, channel pairing, and behavior rules.</div>`;
+        elements.virtualRoomValidationOutput.innerHTML = `<div class="scene-help">Run validation to check the selected household, Amp target, left/right names, and shared behavior rules.</div>`;
         return;
       }
 
@@ -2027,6 +2200,51 @@
         ${renderMessageList("Errors", state.virtualRoomValidation.validation.errors, "danger")}
         ${renderMessageList("Warnings", state.virtualRoomValidation.validation.warnings, "warning")}
       `;
+    }
+
+    async function validateVirtualRoomPair(pair) {
+      const draft = normalizeVirtualRoomPair(pair);
+      const validation = {
+        valid: true,
+        errors: [],
+        warnings: [],
+      };
+
+      if (!draft.left.name.trim()) {
+        validation.errors.push("Left channel name is required.");
+      }
+
+      if (!draft.right.name.trim()) {
+        validation.errors.push("Right channel name is required.");
+      }
+
+      const pairRooms = getVirtualRoomPairRooms(draft);
+      const siblingIds = new Set([pairRooms[0].id, pairRooms[1].id]);
+      const savedSiblings = state.config.virtualRooms.filter((room) => !siblingIds.has(room.id));
+
+      const validations = await Promise.all(
+        pairRooms.map((room, index) =>
+          homebridge.request("/validate-virtual-room", {
+            config: state.config,
+            virtualRoom: room,
+            siblings: [
+              ...savedSiblings,
+              ...pairRooms.filter((_, roomIndex) => roomIndex !== index),
+            ],
+          }),
+        ),
+      );
+
+      validations.forEach((result, index) => {
+        const label = index === 0 ? "Left Channel" : "Right Channel";
+        validation.errors.push(...(result.validation.errors || []).map((message) => `${label}: ${message}`));
+        validation.warnings.push(...(result.validation.warnings || []).map((message) => `${label}: ${message}`));
+      });
+
+      validation.valid = validation.errors.length === 0;
+      return {
+        validation,
+      };
     }
 
     function renderMessageList(title, messages, tone) {
@@ -2125,18 +2343,19 @@
 
     function renderVirtualRoomInputs() {
       if (!state.virtualRoomDraft) {
-        elements.virtualRoomEditorCurrent.textContent = "Virtual Room Settings";
-        elements.virtualRoomValidationOutput.innerHTML = `<div class="scene-help">Create or expand a virtual room to edit its settings here.</div>`;
+        elements.virtualRoomEditorCurrent.textContent = "Virtual Room Pair";
+        elements.virtualRoomValidationOutput.innerHTML = `<div class="scene-help">Create or expand a virtual room pair to edit its settings here.</div>`;
         return;
       }
 
-      elements.virtualRoomName.value = state.virtualRoomDraft.name || "";
-      elements.virtualRoomId.value = state.virtualRoomDraft.id || "";
+      elements.virtualRoomLeftName.value = state.virtualRoomDraft.left?.name || "";
+      elements.virtualRoomRightName.value = state.virtualRoomDraft.right?.name || "";
+      elements.virtualRoomLeftId.value = state.virtualRoomDraft.left?.id || "";
+      elements.virtualRoomRightId.value = state.virtualRoomDraft.right?.id || "";
       updateVirtualRoomEditorHeading();
-      elements.deleteVirtualRoomButton.textContent = virtualRoomDraftExistsInConfig() ? "Delete" : "Discard Draft";
+      elements.deleteVirtualRoomButton.textContent = virtualRoomDraftExistsInConfig() ? "Delete Pair" : "Discard Draft";
       renderVirtualRoomHouseholdOptions();
       renderVirtualRoomAmpOptions();
-      elements.virtualRoomChannel.value = state.virtualRoomDraft.channel || "left";
       elements.virtualRoomDefaultVolume.value = state.virtualRoomDraft.defaultVolume ?? 30;
       elements.virtualRoomMaxVolume.value = state.virtualRoomDraft.maxVolume ?? 100;
       elements.virtualRoomOnBehavior.value = state.virtualRoomDraft.onBehavior?.kind || "restore_last";
@@ -2210,14 +2429,10 @@
         homebridge.toast.error("Create or open a virtual room first.");
         return;
       }
-      serializeVirtualRoomDraft();
+      const draft = serializeVirtualRoomDraft();
       homebridge.showSpinner();
       try {
-        state.virtualRoomValidation = await homebridge.request("/validate-virtual-room", {
-          config: state.config,
-          virtualRoom: state.virtualRoomDraft,
-          siblings: state.config.virtualRooms.filter((room) => room.id !== state.virtualRoomDraft.id),
-        });
+        state.virtualRoomValidation = await validateVirtualRoomPair(draft);
         renderVirtualRoomValidation();
       } catch (error) {
         homebridge.toast.error(error.message || "Virtual room validation failed.");
@@ -2261,14 +2476,35 @@
         return;
       }
       const draft = serializeVirtualRoomDraft();
-      const index = state.config.virtualRooms.findIndex((room) => room.id === draft.id);
-      if (index >= 0) {
-        state.config.virtualRooms[index] = draft;
-      } else {
-        state.config.virtualRooms.push(draft);
+      if (!pairHasRequiredNames(draft)) {
+        homebridge.toast.error("Name both the left and right channels before saving.");
+        return;
       }
-      state.activeVirtualRoomId = draft.id;
-      await persistConfig(true, "Virtual room changes saved here. Use Homebridge's Save button below to write them to config.json.");
+
+      const rooms = getVirtualRoomPairRooms(draft);
+      const roomIds = new Set(rooms.map((room) => room.id));
+      state.config.virtualRooms = state.config.virtualRooms.filter((room) => !roomIds.has(room.id));
+      state.config.virtualRooms.push(...rooms);
+      state.activeVirtualRoomId = buildVirtualRoomPairKey(draft.householdId, draft.ampPlayerId) || draft.pairId;
+      state.virtualRoomDraft = normalizeVirtualRoomPair({
+        pairId: state.activeVirtualRoomId,
+        householdId: draft.householdId,
+        ampPlayerId: draft.ampPlayerId,
+        left: {
+          id: rooms[0].id,
+          name: rooms[0].name,
+        },
+        right: {
+          id: rooms[1].id,
+          name: rooms[1].name,
+        },
+        defaultVolume: rooms[0].defaultVolume,
+        maxVolume: rooms[0].maxVolume,
+        onBehavior: rooms[0].onBehavior,
+        offBehavior: rooms[0].offBehavior,
+        lastActiveBehavior: rooms[0].lastActiveBehavior,
+      });
+      await persistConfig(true, "Virtual room pair changes saved here. Use Homebridge's Save button below to write them to config.json.");
       render();
     }
 
@@ -2304,11 +2540,12 @@
         render();
         return;
       }
-      state.config.virtualRooms = state.config.virtualRooms.filter((room) => room.id !== state.virtualRoomDraft.id);
+      const roomIds = new Set([state.virtualRoomDraft.left?.id, state.virtualRoomDraft.right?.id].filter(Boolean));
+      state.config.virtualRooms = state.config.virtualRooms.filter((room) => !roomIds.has(room.id));
       state.activeVirtualRoomId = null;
       state.virtualRoomDraft = null;
       state.virtualRoomValidation = null;
-      await persistConfig(true, "Virtual room changes saved here. Use Homebridge's Save button below to write them to config.json.");
+      await persistConfig(true, "Virtual room pair changes saved here. Use Homebridge's Save button below to write them to config.json.");
       render();
     }
 
@@ -2326,11 +2563,19 @@
     }
 
     function newVirtualRoom() {
-      const draft = normalizeVirtualRoom({
-        id: randomId(),
+      const draft = normalizeVirtualRoomPair({
+        pairId: `draft:${randomId()}`,
         householdId: state.topology?.households[0]?.id || state.config.defaultHouseholdId || "",
+        left: {
+          id: randomId(),
+          name: "",
+        },
+        right: {
+          id: randomId(),
+          name: "",
+        },
       });
-      state.activeVirtualRoomId = draft.id;
+      state.activeVirtualRoomId = draft.pairId;
       state.virtualRoomDraft = draft;
       state.virtualRoomValidation = null;
       render();
@@ -2447,7 +2692,14 @@
       });
 
       elements.sceneName.addEventListener("input", updateEditorHeading);
-      elements.virtualRoomName.addEventListener("input", updateVirtualRoomEditorHeading);
+      [elements.virtualRoomLeftName, elements.virtualRoomRightName].forEach((element) => {
+        element.addEventListener("input", () => {
+          serializeVirtualRoomDraft();
+          state.virtualRoomValidation = null;
+          updateVirtualRoomEditorHeading();
+          renderVirtualRoomValidation();
+        });
+      });
 
       elements.householdSelect.addEventListener("change", () => {
         serializeDraft();
@@ -2476,7 +2728,6 @@
       [
         elements.virtualRoomHouseholdSelect,
         elements.virtualRoomAmpPlayerSelect,
-        elements.virtualRoomChannel,
         elements.virtualRoomDefaultVolume,
         elements.virtualRoomMaxVolume,
         elements.virtualRoomOnBehavior,
