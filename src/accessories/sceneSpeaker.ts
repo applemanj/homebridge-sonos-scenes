@@ -5,6 +5,7 @@ import type { SonosScenesPlatform } from "../platform";
 export class SceneSpeakerAccessory {
   private service: Service;
   private scene: SceneDefinition;
+  private readonly logger;
   private lastKnownVolume: number;
   private lastKnownActiveVolume: number;
   private lastKnownMuted = false;
@@ -16,6 +17,7 @@ export class SceneSpeakerAccessory {
     scene: SceneDefinition,
   ) {
     this.scene = scene;
+    this.logger = this.platform.createScopedLogger(`scene-volume:${scene.id}`);
     this.lastKnownVolume = scene.coordinatorVolume ?? 30;
     this.lastKnownActiveVolume = this.lastKnownVolume > 0 ? this.lastKnownVolume : 30;
     this.accessory.context.sceneId = scene.id;
@@ -57,6 +59,7 @@ export class SceneSpeakerAccessory {
   }
 
   updateScene(scene: SceneDefinition): void {
+    const previousName = this.scene.name;
     this.scene = scene;
     const configuredVolume = scene.coordinatorVolume;
     if (configuredVolume !== undefined) {
@@ -71,6 +74,9 @@ export class SceneSpeakerAccessory {
     this.syncServiceName(this.displayNameFor(scene));
     this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
     this.service.updateCharacteristic(this.platform.Characteristic.Brightness, this.lastKnownVolume);
+    if (previousName !== scene.name) {
+      this.logger.info(`Renamed scene volume accessory from "${previousName}" to "${scene.name}".`);
+    }
   }
 
   private displayNameFor(scene: SceneDefinition): string {
@@ -89,23 +95,37 @@ export class SceneSpeakerAccessory {
 
   private async handleBrightnessSet(value: CharacteristicValue): Promise<void> {
     const nextVolume = Math.max(0, Math.min(100, Math.round(Number(value))));
-    await this.platform.setSceneVolume(this.scene.id, nextVolume);
-    this.lastKnownVolume = nextVolume;
-    this.service.updateCharacteristic(this.platform.Characteristic.Brightness, nextVolume);
+    this.logger.info(`HomeKit requested brightness=${nextVolume} for "${this.scene.name}" volume accessory.`);
+    try {
+      await this.platform.setSceneVolume(this.scene.id, nextVolume);
+      this.lastKnownVolume = nextVolume;
+      this.service.updateCharacteristic(this.platform.Characteristic.Brightness, nextVolume);
 
-    if (nextVolume > 0) {
-      this.lastKnownActiveVolume = nextVolume;
-      if (this.lastKnownMuted) {
-        await this.platform.setSceneMuted(this.scene.id, false);
-        this.lastKnownMuted = false;
+      if (nextVolume > 0) {
+        this.lastKnownActiveVolume = nextVolume;
+        if (this.lastKnownMuted) {
+          await this.platform.setSceneMuted(this.scene.id, false);
+          this.lastKnownMuted = false;
+        }
+        this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
+        this.logger.info(
+          `Applied brightness change for "${this.scene.name}" volume accessory: on=${this.isOn()}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
+        );
+        return;
       }
-      this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
-      return;
-    }
 
-    await this.platform.setSceneMuted(this.scene.id, true);
-    this.lastKnownMuted = true;
-    this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
+      await this.platform.setSceneMuted(this.scene.id, true);
+      this.lastKnownMuted = true;
+      this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
+      this.logger.info(
+        `Applied brightness change for "${this.scene.name}" volume accessory: on=${this.isOn()}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to set brightness for "${this.scene.name}" volume accessory: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
+    }
   }
 
   private handleOnGet(): CharacteristicValue {
@@ -115,25 +135,39 @@ export class SceneSpeakerAccessory {
 
   private async handleOnSet(value: CharacteristicValue): Promise<void> {
     const nextOn = value === true;
-    if (nextOn) {
-      const restoredVolume = this.lastKnownVolume > 0 ? this.lastKnownVolume : this.lastKnownActiveVolume;
-      if (this.lastKnownVolume <= 0 && restoredVolume > 0) {
-        await this.platform.setSceneVolume(this.scene.id, restoredVolume);
-        this.lastKnownVolume = restoredVolume;
-        this.service.updateCharacteristic(this.platform.Characteristic.Brightness, restoredVolume);
+    this.logger.info(`HomeKit requested on=${nextOn} for "${this.scene.name}" volume accessory.`);
+    try {
+      if (nextOn) {
+        const restoredVolume = this.lastKnownVolume > 0 ? this.lastKnownVolume : this.lastKnownActiveVolume;
+        if (this.lastKnownVolume <= 0 && restoredVolume > 0) {
+          await this.platform.setSceneVolume(this.scene.id, restoredVolume);
+          this.lastKnownVolume = restoredVolume;
+          this.service.updateCharacteristic(this.platform.Characteristic.Brightness, restoredVolume);
+        }
+        await this.platform.setSceneMuted(this.scene.id, false);
+        this.lastKnownMuted = false;
+        this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
+        this.logger.info(
+          `Applied on-state change for "${this.scene.name}" volume accessory: on=${this.isOn()}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
+        );
+        return;
       }
-      await this.platform.setSceneMuted(this.scene.id, false);
-      this.lastKnownMuted = false;
-      this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
-      return;
-    }
 
-    if (this.lastKnownVolume > 0) {
-      this.lastKnownActiveVolume = this.lastKnownVolume;
+      if (this.lastKnownVolume > 0) {
+        this.lastKnownActiveVolume = this.lastKnownVolume;
+      }
+      await this.platform.setSceneMuted(this.scene.id, true);
+      this.lastKnownMuted = true;
+      this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
+      this.logger.info(
+        `Applied on-state change for "${this.scene.name}" volume accessory: on=${this.isOn()}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to set on=${nextOn} for "${this.scene.name}" volume accessory: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
     }
-    await this.platform.setSceneMuted(this.scene.id, true);
-    this.lastKnownMuted = true;
-    this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
   }
 
   private isOn(): boolean {
@@ -146,7 +180,12 @@ export class SceneSpeakerAccessory {
     }
 
     this.refreshInFlight = this.refreshFromPlatform()
-      .catch(() => undefined)
+      .catch((error) => {
+        this.logger.warn(
+          `State refresh failed for "${this.scene.name}" volume accessory: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return undefined;
+      })
       .finally(() => {
         this.refreshInFlight = undefined;
       });
@@ -166,8 +205,13 @@ export class SceneSpeakerAccessory {
       }
       this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
       this.service.updateCharacteristic(this.platform.Characteristic.Brightness, this.lastKnownVolume);
-    } catch {
-      void 0;
+      this.logger.debug(
+        `Refreshed "${this.scene.name}" volume accessory state: on=${this.isOn()}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `State refresh failed for "${this.scene.name}" volume accessory: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 }

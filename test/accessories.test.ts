@@ -96,6 +96,12 @@ const fakePlatform = {
       },
     },
   },
+  createScopedLogger: () => ({
+    debug: () => undefined,
+    info: () => undefined,
+    warn: () => undefined,
+    error: () => undefined,
+  }),
 } as any;
 
 function buildScene(name: string): SceneDefinition {

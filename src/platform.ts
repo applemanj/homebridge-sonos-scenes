@@ -124,6 +124,10 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
     return this.config.virtualRooms.find((room) => room.id === roomId);
   }
 
+  createScopedLogger(scope: string): StructuredLogger {
+    return this.logger.child(scope);
+  }
+
   async getVirtualRoomState(roomId: string): Promise<VirtualRoomState> {
     const room = this.getRequiredVirtualRoom(roomId);
     return this.readVirtualRoomState(room);

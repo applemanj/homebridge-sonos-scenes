@@ -5,6 +5,7 @@ import type { SonosScenesPlatform } from "../platform";
 export class VirtualRoomSpeakerAccessory {
   private service: Service;
   private room: VirtualRoomDefinition;
+  private readonly logger;
   private lastKnownVolume: number;
   private lastKnownActiveVolume: number;
   private lastKnownMuted = true;
@@ -17,6 +18,7 @@ export class VirtualRoomSpeakerAccessory {
     room: VirtualRoomDefinition,
   ) {
     this.room = room;
+    this.logger = this.platform.createScopedLogger(`virtual-room:${room.id}`);
     this.lastKnownVolume = room.defaultVolume;
     this.lastKnownActiveVolume = room.defaultVolume > 0 ? room.defaultVolume : 30;
     this.accessory.context.virtualRoomId = room.id;
@@ -58,6 +60,7 @@ export class VirtualRoomSpeakerAccessory {
   }
 
   updateVirtualRoom(room: VirtualRoomDefinition): void {
+    const previousName = this.room.name;
     this.room = room;
     this.accessory.context.virtualRoomId = room.id;
     this.accessory.context.kind = "virtual-room";
@@ -65,6 +68,9 @@ export class VirtualRoomSpeakerAccessory {
     this.service.setCharacteristic(this.platform.Characteristic.Name, room.name);
     this.service.updateCharacteristic(this.platform.Characteristic.On, this.lastKnownOn);
     this.service.updateCharacteristic(this.platform.Characteristic.Brightness, this.lastKnownVolume);
+    if (previousName !== room.name) {
+      this.logger.info(`Renamed virtual room accessory from "${previousName}" to "${room.name}".`);
+    }
   }
 
   private handleBrightnessGet(): CharacteristicValue {
@@ -74,16 +80,30 @@ export class VirtualRoomSpeakerAccessory {
 
   private async handleBrightnessSet(value: CharacteristicValue): Promise<void> {
     const nextVolume = Math.max(0, Math.min(this.room.maxVolume, Math.round(Number(value))));
-    if (nextVolume > 0) {
-      this.lastKnownActiveVolume = nextVolume;
-      this.applyState(await this.platform.setVirtualRoomVolume(this.room.id, nextVolume));
-      return;
-    }
+    this.logger.info(`HomeKit requested brightness=${nextVolume} for "${this.room.name}".`);
+    try {
+      if (nextVolume > 0) {
+        this.lastKnownActiveVolume = nextVolume;
+        this.applyState(await this.platform.setVirtualRoomVolume(this.room.id, nextVolume));
+        this.logger.info(
+          `Applied brightness change for "${this.room.name}": on=${this.lastKnownOn}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
+        );
+        return;
+      }
 
-    if (this.lastKnownVolume > 0) {
-      this.lastKnownActiveVolume = this.lastKnownVolume;
+      if (this.lastKnownVolume > 0) {
+        this.lastKnownActiveVolume = this.lastKnownVolume;
+      }
+      this.applyState(await this.platform.setVirtualRoomVolume(this.room.id, 0));
+      this.logger.info(
+        `Applied brightness change for "${this.room.name}": on=${this.lastKnownOn}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to set brightness for "${this.room.name}": ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
     }
-    this.applyState(await this.platform.setVirtualRoomVolume(this.room.id, 0));
   }
 
   private handleOnGet(): CharacteristicValue {
@@ -93,15 +113,29 @@ export class VirtualRoomSpeakerAccessory {
 
   private async handleOnSet(value: CharacteristicValue): Promise<void> {
     const nextOn = value === true;
-    if (nextOn) {
-      this.applyState(await this.platform.activateVirtualRoom(this.room.id, this.lastKnownActiveVolume));
-      return;
-    }
+    this.logger.info(`HomeKit requested on=${nextOn} for "${this.room.name}".`);
+    try {
+      if (nextOn) {
+        this.applyState(await this.platform.activateVirtualRoom(this.room.id, this.lastKnownActiveVolume));
+        this.logger.info(
+          `Applied on-state change for "${this.room.name}": on=${this.lastKnownOn}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
+        );
+        return;
+      }
 
-    if (this.lastKnownVolume > 0) {
-      this.lastKnownActiveVolume = this.lastKnownVolume;
+      if (this.lastKnownVolume > 0) {
+        this.lastKnownActiveVolume = this.lastKnownVolume;
+      }
+      this.applyState(await this.platform.deactivateVirtualRoom(this.room.id));
+      this.logger.info(
+        `Applied on-state change for "${this.room.name}": on=${this.lastKnownOn}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to set on=${nextOn} for "${this.room.name}": ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
     }
-    this.applyState(await this.platform.deactivateVirtualRoom(this.room.id));
   }
 
   private queueRefresh(): void {
@@ -110,7 +144,12 @@ export class VirtualRoomSpeakerAccessory {
     }
 
     this.refreshInFlight = this.refreshFromPlatform()
-      .catch(() => undefined)
+      .catch((error) => {
+        this.logger.warn(
+          `State refresh failed for "${this.room.name}": ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return undefined;
+      })
       .finally(() => {
         this.refreshInFlight = undefined;
       });
@@ -118,6 +157,9 @@ export class VirtualRoomSpeakerAccessory {
 
   private async refreshFromPlatform(): Promise<void> {
     this.applyState(await this.platform.getVirtualRoomState(this.room.id));
+    this.logger.debug(
+      `Refreshed "${this.room.name}" state: on=${this.lastKnownOn}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
+    );
   }
 
   private applyState(state: VirtualRoomState): void {

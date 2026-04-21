@@ -5,6 +5,7 @@ import type { SonosScenesPlatform } from "../platform";
 export class SceneSwitchAccessory {
   private service: Service;
   private scene: SceneDefinition;
+  private readonly logger;
   private onState = false;
   private resetTimer?: NodeJS.Timeout;
 
@@ -14,6 +15,7 @@ export class SceneSwitchAccessory {
     scene: SceneDefinition,
   ) {
     this.scene = scene;
+    this.logger = this.platform.createScopedLogger(`scene-switch:${scene.id}`);
     this.accessory.context.sceneId = scene.id;
     this.accessory.displayName = scene.name;
 
@@ -35,10 +37,14 @@ export class SceneSwitchAccessory {
   }
 
   updateScene(scene: SceneDefinition): void {
+    const previousName = this.scene.name;
     this.scene = scene;
     this.accessory.context.sceneId = scene.id;
     this.accessory.displayName = scene.name;
     this.syncServiceName(scene.name);
+    if (previousName !== scene.name) {
+      this.logger.info(`Renamed scene switch accessory from "${previousName}" to "${scene.name}".`);
+    }
   }
 
   private syncServiceName(name: string): void {
@@ -52,6 +58,7 @@ export class SceneSwitchAccessory {
 
   private async handleOnSet(value: CharacteristicValue): Promise<void> {
     const nextState = value === true;
+    this.logger.info(`HomeKit requested on=${nextState} for scene "${this.scene.name}".`);
     if (nextState) {
       this.clearAutoReset();
       this.onState = true;
@@ -59,6 +66,7 @@ export class SceneSwitchAccessory {
 
       const result = await this.platform.runScene(this.scene.id, "on");
       if (!result.ok) {
+        this.logger.error(`Scene "${this.scene.name}" failed on trigger: ${result.errors.join(" ")}`);
         this.onState = false;
         this.service.updateCharacteristic(this.platform.Characteristic.On, false);
         throw new Error(result.errors.join(" "));
@@ -66,6 +74,7 @@ export class SceneSwitchAccessory {
 
       this.onState = true;
       this.service.updateCharacteristic(this.platform.Characteristic.On, true);
+      this.logger.info(`Scene "${this.scene.name}" completed on trigger successfully.`);
       this.armAutoReset();
       return;
     }
@@ -76,12 +85,14 @@ export class SceneSwitchAccessory {
 
     const result = await this.platform.runScene(this.scene.id, "off");
     if (!result.ok) {
+      this.logger.error(`Scene "${this.scene.name}" failed off trigger: ${result.errors.join(" ")}`);
       this.onState = true;
       this.service.updateCharacteristic(this.platform.Characteristic.On, true);
       throw new Error(result.errors.join(" "));
     }
 
     this.onState = false;
+    this.logger.info(`Scene "${this.scene.name}" completed off trigger successfully.`);
   }
 
   private armAutoReset(): void {
@@ -93,6 +104,7 @@ export class SceneSwitchAccessory {
     // When the scene has an explicit off action, keep the switch state stable
     // so HomeKit can be used to trigger that off behavior manually.
     if (this.scene.offBehavior.kind !== "none") {
+      this.logger.debug(`Auto reset skipped for "${this.scene.name}" because off behavior is enabled.`);
       return;
     }
 
@@ -100,7 +112,9 @@ export class SceneSwitchAccessory {
       this.onState = false;
       this.service.updateCharacteristic(this.platform.Characteristic.On, false);
       this.resetTimer = undefined;
+      this.logger.info(`Auto reset cleared scene switch for "${this.scene.name}".`);
     }, this.scene.autoResetMs);
+    this.logger.debug(`Armed auto reset for "${this.scene.name}" in ${this.scene.autoResetMs}ms.`);
   }
 
   private clearAutoReset(): void {
