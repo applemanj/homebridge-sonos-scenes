@@ -4,7 +4,7 @@ import { DiscoveryService } from "../src/discoveryService";
 import { StructuredLogger } from "../src/logger";
 import { sampleTopology } from "../src/sampleTopology";
 import { SceneRunner } from "../src/sceneRunner";
-import type { SceneDefinition, SceneSourceKind, SonosTransport, TopologySnapshot } from "../src/types";
+import type { SceneDefinition, SceneSourceKind, SonosTransport, TopologySnapshot, VirtualRoomChannel } from "../src/types";
 
 class FakeTransport implements SonosTransport {
   readonly kind = "fake";
@@ -59,6 +59,12 @@ class FakeTransport implements SonosTransport {
     this.calls.push(`setPlayerVolume:${playerId}:${volume}`);
   }
 
+  async getPlayerChannelVolume(_householdId: string, _playerId: string, _channel: VirtualRoomChannel): Promise<number> {
+    return 0;
+  }
+
+  async setPlayerChannelVolume(): Promise<void> {}
+
   async getGroupMuted(): Promise<boolean> {
     return false;
   }
@@ -70,6 +76,14 @@ class FakeTransport implements SonosTransport {
   }
 
   async setPlayerMuted(): Promise<void> {}
+
+  async getPlayerChannelMuted(_householdId: string, _playerId: string, _channel: VirtualRoomChannel): Promise<boolean> {
+    return false;
+  }
+
+  async setPlayerChannelMuted(): Promise<void> {}
+
+  async pausePlayback(): Promise<void> {}
 
   async stopPlayback(_householdId: string, coordinatorPlayerId: string): Promise<void> {
     this.calls.push(`stopPlayback:${coordinatorPlayerId}`);

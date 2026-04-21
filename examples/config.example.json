@@ -22,6 +22,7 @@
           "routePlaylists": true
         }
       },
+      "virtualRooms": [],
       "scenes": [
         {
           "id": "upper-level-line-in",

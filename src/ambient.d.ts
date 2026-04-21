@@ -84,7 +84,11 @@ declare module "sonos" {
             onlySetUri?: boolean;
           },
     ): Promise<boolean>;
-    setVolume(volume: number): Promise<boolean>;
+    getVolume(channel?: string): Promise<number>;
+    getMuted(channel?: string): Promise<boolean>;
+    setMuted(muted: boolean, channel?: string): Promise<boolean>;
+    setVolume(volume: number, channel?: string): Promise<boolean>;
+    pause(): Promise<boolean>;
     joinGroup(otherDeviceName: string): Promise<boolean>;
     leaveGroup(): Promise<boolean>;
     stop(): Promise<boolean>;

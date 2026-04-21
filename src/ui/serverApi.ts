@@ -1,10 +1,23 @@
-import { normalizePlatformConfig, normalizeScene, validateSceneDefinition } from "../config";
+import {
+  normalizePlatformConfig,
+  normalizeScene,
+  normalizeVirtualRoom,
+  validateSceneDefinition,
+  validateVirtualRoomDefinition,
+} from "../config";
 import { CloudBrokerClient } from "../cloud/brokerClient";
 import { DiscoveryService } from "../discoveryService";
 import { MemoryLogCollector, StructuredLogger } from "../logger";
 import { SceneRunner } from "../sceneRunner";
 import { createTransport } from "../transports";
-import type { SceneDefinition, SceneRunResult, ScenesPlatformConfig, TopologySnapshot, ValidationResult } from "../types";
+import type {
+  SceneDefinition,
+  SceneRunResult,
+  ScenesPlatformConfig,
+  TopologySnapshot,
+  ValidationResult,
+  VirtualRoomDefinition,
+} from "../types";
 
 export function createDefaultUiConfig(): ScenesPlatformConfig {
   return normalizePlatformConfig(undefined);
@@ -59,6 +72,23 @@ export async function runTestForUi(
   const services = await buildServices(configInput);
   const scene = normalizeScene(sceneInput);
   return services.sceneRunner.runTest(scene);
+}
+
+export async function validateVirtualRoomForUi(
+  configInput: Partial<ScenesPlatformConfig> | undefined,
+  roomInput: Partial<VirtualRoomDefinition>,
+  siblingRoomInputs: Array<Partial<VirtualRoomDefinition>> = [],
+): Promise<{ validation: ValidationResult; normalizedVirtualRoom: VirtualRoomDefinition; snapshot: TopologySnapshot }> {
+  const services = await buildServices(configInput);
+  const snapshot = await services.discoveryService.refresh();
+  const normalizedVirtualRoom = normalizeVirtualRoom(roomInput);
+  const validation = validateVirtualRoomDefinition(normalizedVirtualRoom, snapshot, siblingRoomInputs);
+
+  return {
+    validation,
+    normalizedVirtualRoom,
+    snapshot,
+  };
 }
 
 export async function checkBrokerForUi(
