@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { MemoryLogCollector, StructuredLogger } from "../src/logger";
 import { buildFavoriteTransportUri, LocalSonosTransport, parseFavoriteBrowseXml } from "../src/transports/localTransport";
 
 const rawFavoriteBrowseXml = `
@@ -194,4 +195,100 @@ test("LocalSonosTransport reads live channel state from rendering control instea
   assert.equal(await transport.getPlayerChannelMuted(householdId, playerId, "left"), true);
   assert.equal(await transport.getPlayerChannelMuted(householdId, playerId, "right"), false);
   assert.deepEqual(calls, ["GetVolume:LF", "GetVolume:RF", "GetMute:LF", "GetMute:RF"]);
+});
+
+test("LocalSonosTransport emits transport logs for live channel volume requests and returns", async () => {
+  const householdId = "local-household";
+  const playerId = "RINCON_UPPER_LEVEL";
+  const setVolumeCalls: string[] = [];
+  const collector = new MemoryLogCollector();
+  const logger = new StructuredLogger("test", "info", undefined, collector);
+  const transport = new LocalSonosTransport(
+    {
+      kind: "local",
+      enableLiveDiscovery: false,
+      discoveryTimeoutMs: 2500,
+      requestTimeoutMs: 5000,
+      allowTvSource: false,
+    },
+    logger,
+  );
+
+  const fakeDevice = {
+    setVolume: async (volume: number, channel?: string) => {
+      setVolumeCalls.push(`setVolume:${channel ?? "Master"}:${volume}`);
+    },
+    renderingControlService: () => ({
+      GetVolume: async (channel = "Master") => (channel === "LF" ? 27 : 61),
+      GetMute: async () => false,
+    }),
+  };
+
+  (transport as unknown as {
+    livePlayers: Map<string, unknown>;
+    discoverTopology: () => Promise<unknown>;
+  }).livePlayers = new Map([
+    [
+      playerId,
+      {
+        device: fakeDevice,
+        host: "127.0.0.1",
+        port: 1400,
+        householdId,
+        zoneAttrs: { CurrentZoneName: "Upper Level" },
+      },
+    ],
+  ]);
+
+  (transport as unknown as {
+    discoverTopology: () => Promise<unknown>;
+  }).discoverTopology = async () => ({
+    capturedAt: new Date().toISOString(),
+    origin: "live",
+    households: [
+      {
+        id: householdId,
+        displayName: "Sonos Household",
+        players: [
+          {
+            id: playerId,
+            name: "Upper Level",
+            model: "Sonos Amp",
+            capabilities: ["PLAYBACK", "LINE_IN"],
+            deviceIds: [playerId],
+            isCoordinator: true,
+            fixedVolume: false,
+            sourceOptions: ["favorite", "line_in"],
+          },
+        ],
+        groups: [
+          {
+            id: "group-upper-level",
+            name: "Upper Level",
+            coordinatorId: playerId,
+            playerIds: [playerId],
+            playbackState: "PLAYBACK_STATE_IDLE",
+          },
+        ],
+        favorites: [],
+      },
+    ],
+  });
+
+  await transport.setPlayerChannelVolume(householdId, playerId, "left", 27);
+  assert.equal(await transport.getPlayerChannelVolume(householdId, playerId, "left"), 27);
+
+  assert.deepEqual(setVolumeCalls, ["setVolume:LF:27"]);
+  assert.equal(
+    collector.entries.some((entry) => entry.message.includes("Sending Sonos set channel volume request: player=Upper Level")),
+    true,
+  );
+  assert.equal(
+    collector.entries.some((entry) => entry.message.includes("Sonos set channel volume completed: player=Upper Level")),
+    true,
+  );
+  assert.equal(
+    collector.entries.some((entry) => entry.message.includes("Sonos get channel volume returned: player=Upper Level")),
+    true,
+  );
 });

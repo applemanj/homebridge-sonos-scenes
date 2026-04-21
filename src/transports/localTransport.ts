@@ -10,6 +10,7 @@ import {
   type SonosZoneAttrs,
   type SonosZoneInfo,
 } from "sonos";
+import type { StructuredLogger } from "../logger";
 import { sampleTopology } from "../sampleTopology";
 import type {
   HouseholdSnapshot,
@@ -349,7 +350,10 @@ export class LocalSonosTransport implements SonosTransport {
   private householdRoots = new Map<string, Sonos>();
   private lastSnapshot = normalizeFixtureSnapshot(sampleTopology);
 
-  constructor(private readonly config: LocalTransportConfig) {}
+  constructor(
+    private readonly config: LocalTransportConfig,
+    private readonly logger?: StructuredLogger,
+  ) {}
 
   supportsSource(kind: SceneSourceKind): boolean {
     if (kind === "tv") {
@@ -468,11 +472,17 @@ export class LocalSonosTransport implements SonosTransport {
 
     this.requireHousehold(await this.discoverTopology(), householdId);
     const coordinator = this.requireLiveRecord(coordinatorPlayerId);
+    this.logger?.info(
+      `Sending Sonos line-in load request: household=${householdId}, coordinator=${this.playerLogLabel(coordinatorPlayerId)}, sourceDevice=${deviceId}, playOnCompletion=${playOnCompletion}.`,
+    );
     await coordinator.device.setAVTransportURI({
       uri: `x-rincon-stream:${deviceId}`,
       metadata: "",
       onlySetUri: !playOnCompletion,
     });
+    this.logger?.info(
+      `Sonos line-in load completed: household=${householdId}, coordinator=${this.playerLogLabel(coordinatorPlayerId)}, sourceDevice=${deviceId}.`,
+    );
   }
 
   async loadFavorite(householdId: string, coordinatorPlayerId: string, favoriteId: string): Promise<void> {
@@ -490,10 +500,16 @@ export class LocalSonosTransport implements SonosTransport {
     if (!transportUri) {
       throw new Error(`Favorite "${favorite.name}" does not expose enough metadata to build a playable local URI.`);
     }
+    this.logger?.info(
+      `Sending Sonos favorite load request: household=${householdId}, coordinator=${this.playerLogLabel(coordinatorPlayerId)}, favorite="${favorite.name}" (${favoriteId}), transportUri=${transportUri}.`,
+    );
     await coordinator.device.setAVTransportURI({
       uri: transportUri,
       metadata: favorite.metadata ?? "",
     });
+    this.logger?.info(
+      `Sonos favorite load completed: household=${householdId}, coordinator=${this.playerLogLabel(coordinatorPlayerId)}, favorite="${favorite.name}" (${favoriteId}).`,
+    );
   }
 
   async loadTv(
@@ -979,20 +995,29 @@ export class LocalSonosTransport implements SonosTransport {
 
   private async getLivePlayerVolume(playerId: string): Promise<number> {
     const player = this.requireLiveRecord(playerId);
-    return Math.max(0, Math.min(100, Math.round(await this.audioDevice(player.device).getVolume())));
+    const volume = Math.max(0, Math.min(100, Math.round(await this.audioDevice(player.device).getVolume())));
+    this.logger?.info(`Sonos get volume returned: player=${this.playerLogLabel(playerId)}, volume=${volume}.`);
+    return volume;
   }
 
   private async setLivePlayerVolume(playerId: string, volume: number): Promise<void> {
     const player = this.requireLiveRecord(playerId);
-    await player.device.setVolume(Math.max(0, Math.min(100, Math.round(volume))));
+    const normalizedVolume = Math.max(0, Math.min(100, Math.round(volume)));
+    this.logger?.info(`Sending Sonos set volume request: player=${this.playerLogLabel(playerId)}, volume=${normalizedVolume}.`);
+    await player.device.setVolume(normalizedVolume);
+    this.logger?.info(`Sonos set volume completed: player=${this.playerLogLabel(playerId)}, volume=${normalizedVolume}.`);
   }
 
   private async getLivePlayerChannelVolume(playerId: string, channel: VirtualRoomChannel): Promise<number> {
     const player = this.requireLiveRecord(playerId);
-    return Math.max(
+    const volume = Math.max(
       0,
       Math.min(100, Math.round(await this.channelAwareDevice(player.device).renderingControlService().GetVolume(channelToken(channel)))),
     );
+    this.logger?.info(
+      `Sonos get channel volume returned: player=${this.playerLogLabel(playerId)}, channel=${channel}, volume=${volume}.`,
+    );
+    return volume;
   }
 
   private async setLivePlayerChannelVolume(
@@ -1001,22 +1026,37 @@ export class LocalSonosTransport implements SonosTransport {
     volume: number,
   ): Promise<void> {
     const player = this.requireLiveRecord(playerId);
-    await this.audioDevice(player.device).setVolume(Math.max(0, Math.min(100, Math.round(volume))), channelToken(channel));
+    const normalizedVolume = Math.max(0, Math.min(100, Math.round(volume)));
+    this.logger?.info(
+      `Sending Sonos set channel volume request: player=${this.playerLogLabel(playerId)}, channel=${channel}, volume=${normalizedVolume}.`,
+    );
+    await this.audioDevice(player.device).setVolume(normalizedVolume, channelToken(channel));
+    this.logger?.info(
+      `Sonos set channel volume completed: player=${this.playerLogLabel(playerId)}, channel=${channel}, volume=${normalizedVolume}.`,
+    );
   }
 
   private async getLivePlayerMuted(playerId: string): Promise<boolean> {
     const player = this.requireLiveRecord(playerId);
-    return await this.audioDevice(player.device).getMuted();
+    const muted = await this.audioDevice(player.device).getMuted();
+    this.logger?.info(`Sonos get mute returned: player=${this.playerLogLabel(playerId)}, muted=${muted}.`);
+    return muted;
   }
 
   private async setLivePlayerMuted(playerId: string, muted: boolean): Promise<void> {
     const player = this.requireLiveRecord(playerId);
+    this.logger?.info(`Sending Sonos set mute request: player=${this.playerLogLabel(playerId)}, muted=${muted}.`);
     await this.audioDevice(player.device).setMuted(muted);
+    this.logger?.info(`Sonos set mute completed: player=${this.playerLogLabel(playerId)}, muted=${muted}.`);
   }
 
   private async getLivePlayerChannelMuted(playerId: string, channel: VirtualRoomChannel): Promise<boolean> {
     const player = this.requireLiveRecord(playerId);
-    return await this.channelAwareDevice(player.device).renderingControlService().GetMute(channelToken(channel));
+    const muted = await this.channelAwareDevice(player.device).renderingControlService().GetMute(channelToken(channel));
+    this.logger?.info(
+      `Sonos get channel mute returned: player=${this.playerLogLabel(playerId)}, channel=${channel}, muted=${muted}.`,
+    );
+    return muted;
   }
 
   private async setLivePlayerChannelMuted(
@@ -1025,7 +1065,13 @@ export class LocalSonosTransport implements SonosTransport {
     muted: boolean,
   ): Promise<void> {
     const player = this.requireLiveRecord(playerId);
+    this.logger?.info(
+      `Sending Sonos set channel mute request: player=${this.playerLogLabel(playerId)}, channel=${channel}, muted=${muted}.`,
+    );
     await this.audioDevice(player.device).setMuted(muted, channelToken(channel));
+    this.logger?.info(
+      `Sonos set channel mute completed: player=${this.playerLogLabel(playerId)}, channel=${channel}, muted=${muted}.`,
+    );
   }
 
   private async findFavorite(householdId: string, favoriteId: string): Promise<SonosFavorite> {
@@ -1158,6 +1204,12 @@ export class LocalSonosTransport implements SonosTransport {
 
   private channelAwareDevice(device: Sonos): Sonos & SonosChannelAwareDevice {
     return device as Sonos & SonosChannelAwareDevice;
+  }
+
+  private playerLogLabel(playerId: string): string {
+    const record = this.livePlayers.get(playerId);
+    const playerName = record?.zoneAttrs?.CurrentZoneName?.trim();
+    return playerName ? `${playerName} (${playerId})` : playerId;
   }
 }
 

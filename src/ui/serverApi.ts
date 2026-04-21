@@ -27,7 +27,7 @@ async function buildServices(configInput: Partial<ScenesPlatformConfig> | undefi
   const config = normalizePlatformConfig(configInput);
   const collector = new MemoryLogCollector();
   const logger = new StructuredLogger("ui", config.logLevel, undefined, collector);
-  const transport = createTransport(config);
+  const transport = createTransport(config, logger);
   const discoveryService = new DiscoveryService(transport);
   const sceneRunner = new SceneRunner(discoveryService, transport, logger);
 

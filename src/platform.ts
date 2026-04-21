@@ -42,8 +42,8 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
     this.Service = this.api.hap.Service;
     this.Characteristic = this.api.hap.Characteristic;
     this.config = normalizePlatformConfig(rawConfig as Partial<ScenesPlatformConfig>);
-    this.transport = createTransport(this.config);
     this.logger = new StructuredLogger("platform", this.config.logLevel, this.log);
+    this.transport = createTransport(this.config, this.logger);
     this.discoveryService = new DiscoveryService(this.transport);
     this.sceneRunner = new SceneRunner(this.discoveryService, this.transport, this.logger);
 
