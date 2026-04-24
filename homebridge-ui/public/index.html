@@ -1234,6 +1234,17 @@
       return JSON.parse(JSON.stringify(value));
     }
 
+    function escapeHtml(value) {
+      const replacements = {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      };
+      return String(value ?? "").replace(/[&<>"']/g, (character) => replacements[character]);
+    }
+
     const LOCAL_PLUS_CLOUD_AVAILABLE = false;
 
     function getEffectiveCloudMode(mode) {
@@ -1413,7 +1424,7 @@
       const draft = normalizeVirtualRoomPair(pair);
       const leftName = draft.left.name.trim() || "Left Unnamed";
       const rightName = draft.right.name.trim() || "Right Unnamed";
-      return `Left: ${leftName} • Right: ${rightName}`;
+      return `Left: ${leftName} | Right: ${rightName}`;
     }
 
     function listSavedVirtualRoomPairs() {
@@ -1915,12 +1926,12 @@
       }
 
       if (!status) {
-        elements.brokerStatusOutput.innerHTML = `<span class="scene-status-pill pending">Not Checked</span> <span class="scene-help">Broker configured at ${cloud.broker.url}. Run a check to verify it responds.</span>`;
+        elements.brokerStatusOutput.innerHTML = `<span class="scene-status-pill pending">Not Checked</span> <span class="scene-help">Broker configured at ${escapeHtml(cloud.broker.url)}. Run a check to verify it responds.</span>`;
         return;
       }
 
       if (status.error) {
-        elements.brokerStatusOutput.innerHTML = `<span class="scene-status-pill error">Broker Error</span> <span class="scene-help">${status.error}</span>`;
+        elements.brokerStatusOutput.innerHTML = `<span class="scene-status-pill error">Broker Error</span> <span class="scene-help">${escapeHtml(status.error)}</span>`;
         return;
       }
 
@@ -1938,7 +1949,7 @@
         : brokerStatus.message || "Broker responded successfully.";
       elements.brokerStatusOutput.innerHTML = `
         <span class="scene-status-pill success">${brokerStatus.mode === "scaffold" ? "Scaffold" : "Ready"}</span>
-        <span class="scene-help"><strong>${brokerStatus.name || "Broker"}</strong> ${brokerStatus.version ? `v${brokerStatus.version}` : ""} at ${status.url || state.config.cloud.broker.url}. Features: ${featureText}. ${readiness}</span>
+        <span class="scene-help"><strong>${escapeHtml(brokerStatus.name || "Broker")}</strong> ${brokerStatus.version ? `v${escapeHtml(brokerStatus.version)}` : ""} at ${escapeHtml(status.url || state.config.cloud.broker.url)}. Features: ${escapeHtml(featureText)}. ${escapeHtml(readiness)}</span>
       `;
     }
 
@@ -1947,7 +1958,7 @@
       const currentId = state.draft.householdId || state.config.defaultHouseholdId || households[0]?.id || "";
       state.draft.householdId = currentId;
       elements.householdSelect.innerHTML = households
-        .map((household) => `<option value="${household.id}" ${household.id === currentId ? "selected" : ""}>${household.displayName}</option>`)
+        .map((household) => `<option value="${escapeHtml(household.id)}" ${household.id === currentId ? "selected" : ""}>${escapeHtml(household.displayName)}</option>`)
         .join("");
     }
 
@@ -1958,7 +1969,7 @@
         state.virtualRoomDraft.householdId = currentId;
       }
       elements.virtualRoomHouseholdSelect.innerHTML = households
-        .map((household) => `<option value="${household.id}" ${household.id === currentId ? "selected" : ""}>${household.displayName}</option>`)
+        .map((household) => `<option value="${escapeHtml(household.id)}" ${household.id === currentId ? "selected" : ""}>${escapeHtml(household.displayName)}</option>`)
         .join("");
     }
 
@@ -1988,7 +1999,7 @@
               const ampTag = compatible ? " - Recommended" : " - Incompatible";
               const selected = player.id === currentPlayerId ? "selected" : "";
               const disabled = compatible ? "" : "disabled";
-              return `<option value="${player.id}" ${selected} ${disabled}>${getPlayerDisplayLabel(player)}${ampTag}</option>`;
+              return `<option value="${escapeHtml(player.id)}" ${selected} ${disabled}>${escapeHtml(getPlayerDisplayLabel(player))}${ampTag}</option>`;
             })
             .join("")
         : `<option value="">No players available</option>`;
@@ -2003,11 +2014,11 @@
       }
 
       if (looksLikeAmpPlayer(selectedPlayer)) {
-        elements.virtualRoomAmpNote.innerHTML = `<span class="scene-status-pill success">Amp Ready</span> <span class="scene-help">${getPlayerDisplayLabel(selectedPlayer)} looks like a good virtual-room target.</span>`;
+        elements.virtualRoomAmpNote.innerHTML = `<span class="scene-status-pill success">Amp Ready</span> <span class="scene-help">${escapeHtml(getPlayerDisplayLabel(selectedPlayer))} looks like a good virtual-room target.</span>`;
         return;
       }
 
-      elements.virtualRoomAmpNote.innerHTML = `<span class="scene-status-pill pending">Non-Amp</span> <span class="scene-help">${getPlayerDisplayLabel(selectedPlayer)} is not modeled as a Sonos Amp. Incompatible players stay visible here for reference, but only Amp-like players can be selected for virtual rooms.</span>`;
+      elements.virtualRoomAmpNote.innerHTML = `<span class="scene-status-pill pending">Non-Amp</span> <span class="scene-help">${escapeHtml(getPlayerDisplayLabel(selectedPlayer))} is not modeled as a Sonos Amp. Incompatible players stay visible here for reference, but only Amp-like players can be selected for virtual rooms.</span>`;
     }
 
     function renderMemberOptions() {
@@ -2032,6 +2043,12 @@
                   const isSelected = isForcedSource || selected.has(player.id);
                   const isLeadRoom = isSelected && coordinatorId === player.id;
                   const memberOverrideEnabled = Boolean(state.volumeUi.memberEnabled[player.id] || values.has(player.id));
+                  const playerId = escapeHtml(player.id);
+                  const playerName = escapeHtml(player.name);
+                  const playerModel = escapeHtml(player.model || "Unknown model");
+                  const sourceOptions = escapeHtml(((player.sourceOptions || []).join(", ") || "favorite").replaceAll("_", " "));
+                  const coordinatorVolume = escapeHtml(state.draft.coordinatorVolume ?? "");
+                  const memberVolume = escapeHtml(values.get(player.id) ?? "");
                   const flags = [
                     isForcedSource ? `<span class="scene-member-flag source">Source Room</span>` : "",
                   ].filter(Boolean).join("");
@@ -2039,17 +2056,17 @@
                 <div class="scene-member-pill ${isSelected ? "selected" : ""} ${isLeadRoom ? "has-corner-flag" : ""}">
                   ${isLeadRoom ? `<span class="scene-member-flag primary scene-member-corner-flag">Lead Room</span>` : ""}
                   <label class="scene-member-row scene-member-toggle">
-                    <input class="form-check-input" data-member-checkbox type="checkbox" value="${player.id}" ${isSelected ? "checked" : ""} ${isForcedSource ? "disabled" : ""}>
+                    <input class="form-check-input" data-member-checkbox type="checkbox" value="${playerId}" ${isSelected ? "checked" : ""} ${isForcedSource ? "disabled" : ""}>
                     <span class="scene-member-copy">
-                      <span class="scene-member-title">${player.name}</span>
-                      <span class="scene-member-meta">${player.model || "Unknown model"} - ${((player.sourceOptions || []).join(", ") || "favorite").replaceAll("_", " ")}</span>
+                      <span class="scene-member-title">${playerName}</span>
+                      <span class="scene-member-meta">${playerModel} - ${sourceOptions}</span>
                       ${flags ? `<span class="scene-member-flags">${flags}</span>` : ""}
                     </span>
                   </label>
                   ${isLeadRoom ? `
                     <div class="scene-member-volume">
                       <div class="scene-member-volume-header">
-                        <label class="scene-member-volume-label" for="lead-volume-${player.id}">Lead Room Volume</label>
+                        <label class="scene-member-volume-label" for="lead-volume-${playerId}">Lead Room Volume</label>
                         <button
                           class="scene-member-volume-toggle ${leadOverrideEnabled ? "active" : ""}"
                           data-volume-toggle="coordinator"
@@ -2061,13 +2078,13 @@
                       ${leadOverrideEnabled ? `
                         <input
                           class="form-control form-control-sm scene-member-volume-input"
-                          id="lead-volume-${player.id}"
+                          id="lead-volume-${playerId}"
                           data-coordinator-volume="true"
                           type="number"
                           min="0"
                           max="100"
                           placeholder="Set volume"
-                          value="${state.draft.coordinatorVolume ?? ""}">
+                          value="${coordinatorVolume}">
                       ` : `
                         <div class="scene-member-volume-note">Keeps this room at its current volume when the scene runs.</div>
                       `}
@@ -2076,10 +2093,10 @@
                   ${isSelected && !isLeadRoom ? `
                     <div class="scene-member-volume">
                       <div class="scene-member-volume-header">
-                        <label class="scene-member-volume-label" for="member-volume-${player.id}">Volume Override</label>
+                        <label class="scene-member-volume-label" for="member-volume-${playerId}">Volume Override</label>
                         <button
                           class="scene-member-volume-toggle ${memberOverrideEnabled ? "active" : ""}"
-                          data-volume-toggle="${player.id}"
+                          data-volume-toggle="${playerId}"
                           type="button"
                           aria-pressed="${memberOverrideEnabled ? "true" : "false"}">
                           ${memberOverrideEnabled ? "Override On" : "Keep Current"}
@@ -2088,13 +2105,13 @@
                       ${memberOverrideEnabled ? `
                         <input
                           class="form-control form-control-sm scene-member-volume-input"
-                          id="member-volume-${player.id}"
-                          data-player-id="${player.id}"
+                          id="member-volume-${playerId}"
+                          data-player-id="${playerId}"
                           type="number"
                           min="0"
                           max="100"
                           placeholder="Set volume"
-                          value="${values.get(player.id) ?? ""}">
+                          value="${memberVolume}">
                       ` : `
                         <div class="scene-member-volume-note">Leaves this room at whatever volume it already has.</div>
                       `}
@@ -2137,7 +2154,7 @@
       elements.sourceTargetTooltip.textContent = activeSourceTargetUi.tooltip;
 
       elements.sourceKind.innerHTML = supportedKinds
-        .map((kind) => `<option value="${kind}" ${kind === sourceKind ? "selected" : ""}>${kind.replace("_", " ")}</option>`)
+        .map((kind) => `<option value="${escapeHtml(kind)}" ${kind === sourceKind ? "selected" : ""}>${escapeHtml(kind.replace("_", " "))}</option>`)
         .join("");
 
       if (sourceKind === "favorite") {
@@ -2159,9 +2176,9 @@
           .map((favorite, index) => {
             const label = favorite.description ? `${favorite.name} (${favorite.description})` : favorite.name;
             if (index === 0 && !selectedFavorite) {
-              return `<option value="">Select a favorite</option><option value="${favorite.id}" ${favorite.id === selectedFavorite ? "selected" : ""}>${label}</option>`;
+              return `<option value="">Select a favorite</option><option value="${escapeHtml(favorite.id)}" ${favorite.id === selectedFavorite ? "selected" : ""}>${escapeHtml(label)}</option>`;
             }
-            return `<option value="${favorite.id}" ${favorite.id === selectedFavorite ? "selected" : ""}>${label}</option>`;
+            return `<option value="${escapeHtml(favorite.id)}" ${favorite.id === selectedFavorite ? "selected" : ""}>${escapeHtml(label)}</option>`;
           })
           .join("");
         return;
@@ -2178,7 +2195,7 @@
         playOnCompletion: true,
       };
       elements.sourceTarget.innerHTML = sourcePlayers
-        .map((player) => `<option value="${player.id}" ${player.id === selectedPlayer ? "selected" : ""}>${player.name}</option>`)
+        .map((player) => `<option value="${escapeHtml(player.id)}" ${player.id === selectedPlayer ? "selected" : ""}>${escapeHtml(player.name)}</option>`)
         .join("");
     }
 
@@ -2281,11 +2298,12 @@
       if (!messages || messages.length === 0) {
         return "";
       }
+      const safeTone = ["danger", "warning", "info", "success"].includes(tone) ? tone : "info";
       return `
-        <div class="alert alert-${tone} py-2">
-          <strong>${title}</strong>
+        <div class="alert alert-${safeTone} py-2">
+          <strong>${escapeHtml(title)}</strong>
           <ul class="mb-0 mt-2">
-            ${messages.map((message) => `<li>${message}</li>`).join("")}
+            ${messages.map((message) => `<li>${escapeHtml(message)}</li>`).join("")}
           </ul>
         </div>
       `;
@@ -2293,7 +2311,7 @@
 
     function renderLogs() {
       const logLines = (state.lastRun?.logs || []).map((entry) => {
-        return `<div class="scene-log-line">[${entry.level.toUpperCase()}] ${entry.scope}: ${entry.message}</div>`;
+        return `<div class="scene-log-line">[${escapeHtml(String(entry.level || "").toUpperCase())}] ${escapeHtml(entry.scope)}: ${escapeHtml(entry.message)}</div>`;
       });
       elements.logOutput.innerHTML = logLines.length > 0
         ? logLines.join("")
@@ -2314,40 +2332,35 @@
           const groups = household.groups
             .map((group) => {
               const memberNames = group.playerIds.map((playerId) => household.players.find((player) => player.id === playerId)?.name || playerId);
-              return `<li><strong>${group.name}</strong>: ${memberNames.join(", ")}</li>`;
+              return `<li><strong>${escapeHtml(group.name)}</strong>: ${escapeHtml(memberNames.join(", "))}</li>`;
             })
             .join("");
 
-          const players = household.players
-            .map((player) => `<li><strong>${player.name}</strong> <span class="scene-help">${player.model || "Unknown model"} · ${(player.sourceOptions || []).join(", ")}</span></li>`)
-            .join("");
-
-          const favorites = (household.favorites || []).map((favorite) => `<li>${favorite.name}</li>`).join("");
           const playerRows = household.players
             .map((player) => {
               const sourceOptions = ((player.sourceOptions || []).join(", ") || "favorite").replaceAll("_", " ");
-              return `<li><strong>${player.name}</strong> <span class="scene-help">${player.model || "Unknown model"} - ${sourceOptions}</span></li>`;
+              return `<li><strong>${escapeHtml(player.name)}</strong> <span class="scene-help">${escapeHtml(player.model || "Unknown model")} - ${escapeHtml(sourceOptions)}</span></li>`;
             })
             .join("");
           const favoriteRows = (household.favorites || [])
             .map((favorite) => {
               const detail = favorite.description ? `(${favorite.description})` : "";
               const support = favorite.playable === false ? " - not playable in local scenes" : "";
-              return `<li>${favorite.name}${detail ? ` <span class="scene-help">${detail}</span>` : ""}${support ? ` <span class="scene-help">${support}</span>` : ""}</li>`;
+              return `<li>${escapeHtml(favorite.name)}${detail ? ` <span class="scene-help">${escapeHtml(detail)}</span>` : ""}${support ? ` <span class="scene-help">${support}</span>` : ""}</li>`;
             })
             .join("");
 
           return `
             <div class="card h-100">
               <div class="card-body">
-                <h5 class="card-title">${household.displayName}</h5>
-                <p class="scene-help mb-3">${household.id}</p>
+                <h5 class="card-title">${escapeHtml(household.displayName)}</h5>
+                <p class="scene-help mb-3">${escapeHtml(household.id)}</p>
                 <strong>Players</strong>
-                <ul>${playerRows || players || "<li>None</li>"}</ul>
+                <ul>${playerRows || "<li>None</li>"}</ul>
                 <strong>Current Groups</strong>
                 <ul>${groups || "<li>None</li>"}</ul>
                 <strong>Favorites</strong>
-                <ul>${favoriteRows || favorites || "<li>None</li>"}</ul>
+                <ul>${favoriteRows || "<li>None</li>"}</ul>
               </div>
             </div>
           `;

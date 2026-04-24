@@ -13,6 +13,8 @@ Support setups where one Sonos Amp feeds speakers in two physical rooms, for exa
 
 Both sides still share the same Sonos playback source. The feature is only about per-side `on/off` and per-side volume-style control.
 
+The Homebridge UI now presents this as a paired editor: pick one Amp, name the left and right rooms together, then save both virtual accessories as one pair.
+
 ## Config Shape
 
 Recommended top-level key:
@@ -94,7 +96,7 @@ Example with both sides of one Amp:
 ## Field Notes
 
 - `id`
-  Stable identifier for the Homebridge accessory pair and internal bookkeeping.
+  Stable identifier for the Homebridge accessory and internal bookkeeping.
 - `name`
   User-facing name shown in Homebridge and Apple Home.
 - `householdId`
@@ -104,7 +106,7 @@ Example with both sides of one Amp:
 - `channel`
   One of `left` or `right`.
 - `defaultVolume`
-  Starting channel volume to use when turning the virtual room on and no previous active value is known.
+  Starting virtual room volume to use when turning the virtual room on and no previous active value is known.
 - `maxVolume`
   Safety clamp for the virtual room so a bathroom or bedroom side cannot be driven past a chosen level from HomeKit.
 - `onBehavior.kind`
@@ -155,19 +157,19 @@ The validator should enforce at least:
 
 The runtime maps these controls as follows:
 
-- room `on`: unmute the room's channel and restore a volume
-- room `off`: mute the room's channel
-- room volume: set the room's channel volume, not the Amp master volume
+- room `on`: unmute the room's channel, unmute the Amp master, and restore a volume target
+- room `off`: mute the room's channel or set it to zero, depending on the configured off behavior
+- room volume: set the channel target and raise the Amp master volume when needed so the requested HomeKit brightness is audible
 
 Important constraints:
 
 - both virtual rooms still share one playback source
 - HomeKit state may need to be partly optimistic if Sonos events do not report left/right channel state with the same fidelity as master volume/mute
-- master volume changes from outside the plugin can still affect the perceived loudness of both virtual rooms
+- master volume changes from outside the plugin can still affect the perceived loudness of both virtual rooms if the master is later lowered outside this plugin
 
 ## Future Ideas
 
 - supporting `volume_zero` as the default off behavior instead of `mute`
 - exposing a dedicated companion volume accessory instead of relying on a single combined `On` and `Brightness` accessory
 - moving shared policies such as `lastActiveBehavior` to a per-Amp config object
-- requiring paired `left` and `right` room definitions for some installations
+- adding richer status from Sonos events when channel-level state is available

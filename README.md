@@ -31,7 +31,7 @@ Each saved virtual room creates:
 
 - a HomeKit lightbulb accessory for one Sonos Amp channel
 - `On` control for channel mute and unmute
-- `Brightness` control for that channel's volume trim
+- `Brightness` control for that virtual room's volume target
 
 Typical examples:
 
@@ -49,7 +49,7 @@ Typical examples:
 - Scene test runs before saving
 - Per-room volume overrides
 - Virtual rooms for Sonos Amp left and right split-room installs
-- Per-channel on/off and channel volume control for virtual rooms
+- Per-channel on/off plus virtual room volume control
 - Virtual room create, edit, and validation flows in the Homebridge UI
 
 ## Current Limits
@@ -97,13 +97,14 @@ Use virtual rooms when one Sonos Amp feeds two spaces, such as a bedroom speaker
 2. Click `Discover` so the UI has a current Sonos topology.
 3. Open `Virtual Room Workspace`.
 4. Click `New Virtual Room`.
-5. Choose the household, Amp player, and `left` or `right` channel.
-6. Set the default volume, max volume, and on/off behaviors.
-7. Click `Validate Virtual Room`.
-8. Click `Save Virtual Room Changes`.
-9. Use Homebridge's footer `Save` button to write the full plugin config to disk.
+5. Choose the household and Amp player.
+6. Name the left and right channel rooms.
+7. Set the default volume, max volume, and on/off behaviors.
+8. Click `Validate Virtual Room`.
+9. Click `Save Virtual Room Changes`.
+10. Use Homebridge's footer `Save` button to write the full plugin config to disk.
 
-After Homebridge reloads, each virtual room appears in Apple Home as a lightbulb-style accessory. `On` controls whether that channel is active, and `Brightness` adjusts the channel volume. Both sides of the Amp still share the same Sonos source.
+After Homebridge reloads, each virtual room appears in Apple Home as a lightbulb-style accessory. `On` controls whether that channel is active, and `Brightness` adjusts the virtual room volume target. Both sides of the Amp still share the same Sonos source.
 
 ## Recommended Starting Point
 
