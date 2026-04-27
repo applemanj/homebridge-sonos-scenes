@@ -797,6 +797,19 @@
           <div id="broker-status-output" class="scene-help">No broker check has been run yet.</div>
         </div>
         <div id="cloud-mode-note" class="scene-inline-note">Local Only is the simplest starting point. Switch to Local + Cloud only if you already run your own broker service.</div>
+        <div class="scene-mode-expanded">
+          <label class="form-check mb-0">
+            <input class="form-check-input" id="allow-tv-source" type="checkbox">
+            <span class="form-check-label">
+              Show TV input sources
+              <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain TV input sources">
+                ?
+                <span class="scene-tooltip">Experimental local option. When enabled, rooms that look like Sonos home theater players, such as Arc, Beam, Ray, Playbar, Playbase, or Amp, can appear as TV source targets after Discover refreshes the topology.</span>
+              </span>
+            </span>
+          </label>
+          <div class="scene-help mt-2">Leave this off unless you want to test TV-input scenes with local Sonos control.</div>
+        </div>
       </div>
     </section>
   </section>
@@ -1190,6 +1203,7 @@
       cloudBrokerCopy: document.getElementById("cloud-broker-copy"),
       cloudBrokerFields: document.getElementById("cloud-broker-fields"),
       cloudModeNote: document.getElementById("cloud-mode-note"),
+      allowTvSource: document.getElementById("allow-tv-source"),
       brokerUrl: document.getElementById("broker-url"),
       brokerApiKey: document.getElementById("broker-api-key"),
       brokerTimeoutMs: document.getElementById("broker-timeout-ms"),
@@ -1304,6 +1318,14 @@
         },
       };
       return state.config.cloud;
+    }
+
+    function serializeTransportConfig() {
+      state.config.transport = Object.assign({}, state.config.transport, {
+        kind: "local",
+        allowTvSource: Boolean(elements.allowTvSource?.checked),
+      });
+      return state.config.transport;
     }
 
     function normalizeScene(scene) {
@@ -1896,6 +1918,7 @@
         : LOCAL_PLUS_CLOUD_AVAILABLE
           ? "Local Only is the simplest starting point. Switch to Local + Cloud only if you already run your own broker service."
           : "Local Only is the current supported mode. Local + Cloud is coming soon once the broker flow is ready for broader testing.";
+      elements.allowTvSource.checked = Boolean(state.config.transport?.allowTvSource);
 
       elements.brokerUrl.value = cloud.broker?.url || "";
       elements.brokerApiKey.value = cloud.broker?.apiKey || "";
@@ -2432,6 +2455,7 @@
     }
 
     async function discover() {
+      serializeTransportConfig();
       serializeCloudConfig();
       homebridge.showSpinner();
       try {
@@ -2670,6 +2694,14 @@
           render();
           stageConfigUpdate();
         });
+      });
+
+      elements.allowTvSource.addEventListener("change", () => {
+        serializeTransportConfig();
+        state.validation = null;
+        state.lastRun = null;
+        stageConfigUpdate();
+        void discover();
       });
 
       [

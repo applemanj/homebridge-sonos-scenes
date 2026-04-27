@@ -81,7 +81,9 @@ class FakeTransport implements SonosTransport {
     return false;
   }
 
-  async setPlayerMuted(): Promise<void> {}
+  async setPlayerMuted(_householdId: string, playerId: string, muted: boolean): Promise<void> {
+    this.calls.push(`setPlayerMuted:${playerId}:${muted}`);
+  }
 
   async getPlayerChannelMuted(_householdId: string, _playerId: string, _channel: VirtualRoomChannel): Promise<boolean> {
     return false;
@@ -143,8 +145,18 @@ test("SceneRunner executes scene actions in order and retries transient failures
     new Set(transport.calls.slice(3)),
     new Set([
       "setPlayerVolume:RINCON_UPPER_LEVEL:20",
+      "setPlayerMuted:RINCON_UPPER_LEVEL:false",
       "setPlayerVolume:RINCON_PRIMARY_BEDROOM:16",
+      "setPlayerMuted:RINCON_PRIMARY_BEDROOM:false",
     ]),
+  );
+  assert.ok(
+    transport.calls.indexOf("setPlayerVolume:RINCON_UPPER_LEVEL:20")
+      < transport.calls.indexOf("setPlayerMuted:RINCON_UPPER_LEVEL:false"),
+  );
+  assert.ok(
+    transport.calls.indexOf("setPlayerVolume:RINCON_PRIMARY_BEDROOM:16")
+      < transport.calls.indexOf("setPlayerMuted:RINCON_PRIMARY_BEDROOM:false"),
   );
   assert.equal(transport.discoverCalls, 1);
 });
@@ -221,6 +233,44 @@ test("SceneRunner surfaces partial failure when one parallel room volume write f
     new Set([
       "setPlayerVolume:RINCON_UPPER_LEVEL:20",
       "setPlayerVolume:RINCON_PRIMARY_BEDROOM:16",
+    ]),
+  );
+});
+
+test("SceneRunner unmutes selected rooms even when they do not have volume overrides", async () => {
+  const transport = new FakeTransport();
+  (transport as any).failSetGroupMembersOnce = false;
+  const discovery = new DiscoveryService(transport);
+  const runner = new SceneRunner(discovery, transport, new StructuredLogger("test", "debug"));
+
+  const scene: SceneDefinition = {
+    id: "scene-unmute-without-volume",
+    name: "Unmute Without Volume",
+    householdId: "local-household",
+    coordinatorPlayerId: "RINCON_UPPER_LEVEL",
+    memberPlayerIds: ["RINCON_PRIMARY_BEDROOM"],
+    source: {
+      kind: "line_in",
+      deviceId: "RINCON_UPPER_LEVEL",
+      playOnCompletion: true,
+    },
+    playerVolumes: [],
+    offBehavior: {
+      kind: "none",
+    },
+    settleMs: 0,
+    retryCount: 0,
+    retryDelayMs: 0,
+    autoResetMs: 0,
+  };
+
+  const result = await runner.runOn(scene);
+  assert.equal(result.ok, true);
+  assert.deepEqual(
+    new Set(transport.calls.filter((call) => call.startsWith("setPlayerMuted:"))),
+    new Set([
+      "setPlayerMuted:RINCON_UPPER_LEVEL:false",
+      "setPlayerMuted:RINCON_PRIMARY_BEDROOM:false",
     ]),
   );
 });

@@ -56,7 +56,7 @@ Typical examples:
 
 - This is still beta software
 - Some complex Sonos favorites do not work reliably over the local-only path
-- `TV` remains a transport-gated advanced option
+- `TV` remains an experimental local option; enable `Show TV input sources` before testing it
 - `Local + Cloud` is reserved for future self-hosted broker support and is not wired into playback yet
 - Virtual rooms on the same Amp still share one Sonos playback source
 - External master-volume changes can still affect the perceived loudness of both virtual rooms

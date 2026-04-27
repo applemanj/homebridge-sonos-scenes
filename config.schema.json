@@ -67,7 +67,8 @@
             "default": 5000
           },
           "allowTvSource": {
-            "title": "Allow TV Source",
+            "title": "Show TV Input Sources",
+            "description": "Experimental local option. When enabled, discovered Sonos home theater players can appear as TV source targets in the custom UI.",
             "type": "boolean",
             "default": false
           }

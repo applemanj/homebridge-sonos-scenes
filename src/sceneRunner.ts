@@ -183,18 +183,30 @@ export class SceneRunner {
       requestedVolumes.set(volume.playerId, volume.volume);
     }
 
+    const selectedPlayerIds = new Set([scene.coordinatorPlayerId, ...scene.memberPlayerIds, ...requestedVolumes.keys()]);
+
     await Promise.all(
-      Array.from(requestedVolumes.entries()).map(async ([playerId, volume]) => {
+      Array.from(selectedPlayerIds).map(async (playerId) => {
+        const volume = requestedVolumes.get(playerId);
+        if (volume === undefined) {
+          await this.withRetry(scene, `unmute room ${playerId}`, () =>
+            this.transport.setPlayerMuted(scene.householdId, playerId, false),
+          );
+          log("info", `Unmuted room: ${playerId}`);
+          return;
+        }
+
         const label = playerId === scene.coordinatorPlayerId && scene.coordinatorVolume !== undefined
           ? `set coordinator volume ${volume}`
           : `set room volume ${playerId}=${volume}`;
-        await this.withRetry(scene, label, () =>
-          this.transport.setPlayerVolume(scene.householdId, playerId, volume),
-        );
+        await this.withRetry(scene, label, async () => {
+          await this.transport.setPlayerVolume(scene.householdId, playerId, volume);
+          await this.transport.setPlayerMuted(scene.householdId, playerId, false);
+        });
         if (playerId === scene.coordinatorPlayerId && scene.coordinatorVolume !== undefined) {
-          log("info", `Set coordinator volume: ${playerId}=${volume}`);
+          log("info", `Set coordinator volume and unmuted: ${playerId}=${volume}`);
         } else {
-          log("info", `Set volume: ${playerId}=${volume}`);
+          log("info", `Set volume and unmuted: ${playerId}=${volume}`);
         }
       }),
     );

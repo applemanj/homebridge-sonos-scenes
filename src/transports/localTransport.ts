@@ -564,11 +564,17 @@ export class LocalSonosTransport implements SonosTransport {
     }
 
     const coordinator = this.requireLiveRecord(coordinatorPlayerId);
+    this.logger?.info(
+      `Sending Sonos TV load request: household=${householdId}, coordinator=${this.playerLogLabel(coordinatorPlayerId)}, sourceDevice=${deviceId}, playOnCompletion=${playOnCompletion}.`,
+    );
     await coordinator.device.setAVTransportURI({
       uri: `x-sonos-htastream:${deviceId}:spdif`,
       metadata: "",
       onlySetUri: !playOnCompletion,
     });
+    this.logger?.info(
+      `Sonos TV load completed: household=${householdId}, coordinator=${this.playerLogLabel(coordinatorPlayerId)}, sourceDevice=${deviceId}.`,
+    );
   }
 
   async setGroupVolume(householdId: string, coordinatorPlayerId: string, volume: number): Promise<void> {
