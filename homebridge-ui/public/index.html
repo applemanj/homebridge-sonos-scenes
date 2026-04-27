@@ -872,7 +872,7 @@
                 <span>Scene Rooms</span>
                 <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Group Members">
                   ?
-                  <span class="scene-tooltip">Pick the rooms that should be part of this scene. For line-in and TV scenes, the source room is included automatically. One selected room becomes the internal lead room behind the scenes.</span>
+                  <span class="scene-tooltip">Pick the rooms that should play this scene. Line-in can use a source from a different room; TV scenes still include the TV-capable source room automatically. One selected room becomes the internal lead room behind the scenes.</span>
                 </span>
               </span>
             </label>
@@ -1619,7 +1619,7 @@
     function getSelectedSceneRoomIdsFromDraft() {
       const selected = Array.from(new Set([state.draft.coordinatorPlayerId, ...(state.draft.memberPlayerIds || [])].filter(Boolean)));
       const source = state.draft.source;
-      if ((source?.kind === "line_in" || source?.kind === "tv") && source.deviceId) {
+      if (source?.kind === "tv" && source.deviceId) {
         if (!selected.includes(source.deviceId)) {
           selected.unshift(source.deviceId);
         }
@@ -1630,7 +1630,7 @@
     function resolveCoordinatorPlayerId(selectedRoomIds, source) {
       const uniqueRooms = Array.from(new Set((selectedRoomIds || []).filter(Boolean)));
 
-      if ((source?.kind === "line_in" || source?.kind === "tv") && source.deviceId) {
+      if (source?.kind === "tv" && source.deviceId) {
         return source.deviceId;
       }
 
@@ -1638,7 +1638,7 @@
         return state.draft.coordinatorPlayerId;
       }
 
-      return uniqueRooms[0] || "";
+      return uniqueRooms[0] || (source?.kind === "line_in" ? source.deviceId || "" : "");
     }
 
     function serializeDraft() {
@@ -1649,7 +1649,7 @@
       draft.source = buildSourcePayload();
       const selectedRoomIds = Array.from(elements.memberList.querySelectorAll("input[type='checkbox']:checked")).map((checkbox) => checkbox.value);
       draft.coordinatorPlayerId = resolveCoordinatorPlayerId(selectedRoomIds, draft.source);
-      if ((draft.source?.kind === "line_in" || draft.source?.kind === "tv") && draft.source.deviceId && !selectedRoomIds.includes(draft.source.deviceId)) {
+      if (draft.source?.kind === "tv" && draft.source.deviceId && !selectedRoomIds.includes(draft.source.deviceId)) {
         selectedRoomIds.unshift(draft.source.deviceId);
       }
       draft.memberPlayerIds = selectedRoomIds.filter((playerId) => playerId !== draft.coordinatorPlayerId);
@@ -2053,9 +2053,10 @@
       state.draft.memberPlayerIds = selectedRoomIds.filter((playerId) => playerId !== coordinatorId);
       const values = new Map((state.draft.playerVolumes || []).map((entry) => [entry.playerId, entry.volume]));
       const leadOverrideEnabled = state.volumeUi.coordinatorEnabled || state.draft.coordinatorVolume !== "";
-      const forcedSourceId = (state.draft.source?.kind === "line_in" || state.draft.source?.kind === "tv")
+      const sourceDeviceId = (state.draft.source?.kind === "line_in" || state.draft.source?.kind === "tv")
         ? state.draft.source.deviceId
         : "";
+      const forcedSourceId = state.draft.source?.kind === "tv" ? sourceDeviceId : "";
       const players = household?.players || [];
       elements.memberList.innerHTML = players.length === 0
         ? `<div class="scene-help">No rooms are available in this household.</div>`
@@ -2063,6 +2064,7 @@
               .map(
                 (player) => {
                   const isForcedSource = forcedSourceId === player.id;
+                  const isSourceDevice = sourceDeviceId === player.id;
                   const isSelected = isForcedSource || selected.has(player.id);
                   const isLeadRoom = isSelected && coordinatorId === player.id;
                   const memberOverrideEnabled = Boolean(state.volumeUi.memberEnabled[player.id] || values.has(player.id));
@@ -2073,7 +2075,7 @@
                   const coordinatorVolume = escapeHtml(state.draft.coordinatorVolume ?? "");
                   const memberVolume = escapeHtml(values.get(player.id) ?? "");
                   const flags = [
-                    isForcedSource ? `<span class="scene-member-flag source">Source Room</span>` : "",
+                    isSourceDevice ? `<span class="scene-member-flag source">${state.draft.source?.kind === "line_in" ? "Line-In Source" : "Source Room"}</span>` : "",
                   ].filter(Boolean).join("");
                   return `
                 <div class="scene-member-pill ${isSelected ? "selected" : ""} ${isLeadRoom ? "has-corner-flag" : ""}">
@@ -2162,7 +2164,7 @@
         },
         line_in: {
           label: "Line-In Source",
-          tooltip: "Choose the Sonos player that physically owns the line-in jack you want to play. The selected scene rooms will then join that source.",
+          tooltip: "Choose the Sonos player that physically owns the line-in jack you want to play. The selected scene rooms can play this source without forcing the source room into the group.",
         },
         tv: {
           label: "TV Source",

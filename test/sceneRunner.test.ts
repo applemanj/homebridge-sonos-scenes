@@ -191,6 +191,45 @@ test("SceneRunner executes the off ungroup action", async () => {
   assert.equal(transport.discoverCalls, 1);
 });
 
+test("SceneRunner can load a line-in source from a room that is not in the playback group", async () => {
+  const transport = new FakeTransport();
+  (transport as any).failSetGroupMembersOnce = false;
+  const discovery = new DiscoveryService(transport);
+  const runner = new SceneRunner(discovery, transport, new StructuredLogger("test", "debug"));
+
+  const scene: SceneDefinition = {
+    id: "scene-remote-line-in",
+    name: "Office Remote Line In",
+    householdId: "local-household",
+    coordinatorPlayerId: "RINCON_PRIMARY_BEDROOM",
+    memberPlayerIds: [],
+    source: {
+      kind: "line_in",
+      deviceId: "RINCON_UPPER_LEVEL",
+      playOnCompletion: true,
+    },
+    coordinatorVolume: 30,
+    playerVolumes: [],
+    offBehavior: {
+      kind: "none",
+    },
+    settleMs: 0,
+    retryCount: 0,
+    retryDelayMs: 0,
+    autoResetMs: 0,
+  };
+
+  const result = await runner.runOn(scene);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(transport.calls, [
+    "setGroupMembers:RINCON_PRIMARY_BEDROOM:",
+    "loadLineIn:RINCON_PRIMARY_BEDROOM:RINCON_UPPER_LEVEL",
+    "setPlayerVolume:RINCON_PRIMARY_BEDROOM:30",
+    "setPlayerMuted:RINCON_PRIMARY_BEDROOM:false",
+  ]);
+});
+
 test("SceneRunner surfaces partial failure when one parallel room volume write fails", async () => {
   const transport = new FakeTransport();
   (transport as any).failSetGroupMembersOnce = false;

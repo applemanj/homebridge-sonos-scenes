@@ -133,6 +133,35 @@ test("validateSceneDefinition rejects favorites the local transport cannot play"
   assert.match(validation.errors.join(" "), /not playable through the local transport/i);
 });
 
+test("validateSceneDefinition allows line-in source devices outside the playback group", () => {
+  const validation = validateSceneDefinition(
+    {
+      id: "scene-remote-line-in",
+      name: "Office Remote Line In",
+      householdId: "local-household",
+      coordinatorPlayerId: "RINCON_PRIMARY_BEDROOM",
+      memberPlayerIds: [],
+      source: {
+        kind: "line_in",
+        deviceId: "RINCON_UPPER_LEVEL",
+      },
+      coordinatorVolume: 30,
+      playerVolumes: [],
+      offBehavior: {
+        kind: "none",
+      },
+      settleMs: 750,
+      retryCount: 1,
+      retryDelayMs: 0,
+      autoResetMs: 0,
+    },
+    sampleTopology,
+    fakeTransport,
+  );
+
+  assert.equal(validation.valid, true);
+});
+
 test("validateSceneDefinition warns when auto reset is ignored by off behavior", () => {
   const validation = validateSceneDefinition(
     {

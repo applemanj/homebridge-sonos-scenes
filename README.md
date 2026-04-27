@@ -46,6 +46,7 @@ Typical examples:
 - Favorites that are playable over the local Sonos path
 - Line-in scenes
 - Grouping and ungrouping
+- Background scene switch reconciliation for external Sonos grouping changes
 - Scene test runs before saving
 - Per-room volume overrides
 - Virtual rooms for Sonos Amp left and right split-room installs
@@ -57,11 +58,46 @@ Typical examples:
 - This is still beta software
 - Some complex Sonos favorites do not work reliably over the local-only path
 - `TV` remains an experimental local option; enable `Show TV input sources` before testing it
+- Scene switch reconciliation currently tracks group membership, not exact source or volume state
 - `Local + Cloud` is reserved for future self-hosted broker support and is not wired into playback yet
 - Virtual rooms on the same Amp still share one Sonos playback source
 - External master-volume changes can still affect the perceived loudness of both virtual rooms
 
 For most people, `Local Only` is the right mode today.
+
+## Roadmap
+
+This roadmap is meant to show the direction of the project, not lock every feature to a specific release date. The theme is deliberate: make the local-only beta dependable first, then add cloud-backed capabilities where they solve real Sonos limitations. Priorities may shift based on real-world testing, Sonos behavior, and community feedback.
+
+### Near-Term Hardening (v0.2.x): Finish the Beta
+
+- **TV Source General Availability**: move local TV input scenes out of the advanced/experimental toggle after broader validation across TV-capable Sonos devices and common home-theater setups.
+- **Scene State Reconciliation**: expand the v0.1.31 group-membership reconciliation into a stronger live-state system, including source and playback-state awareness where Sonos reports those states reliably.
+- **Volume Ramping / Fade-In-Fade-Out**: let scenes move volume gradually instead of jumping instantly, making bedtime, gentle wake, and ambience scenes feel more natural.
+- **Scene Off = Restore Previous State**: add off behaviors beyond ungrouping, such as pause, stop, restore the prior group topology, or return rooms to a default idle state.
+- **Crossfade, Sleep Timer, and EQ Per Scene**: add optional per-scene playback settings such as crossfade, sleep timer minutes, bass, treble, and loudness, with safeguards so scenes do not leave speakers in surprising states.
+
+### Mid-Term Expansion (v0.3.x): Cloud Broker & Smarter Workflows
+
+- **Complete the Self-Hosted Cloud Broker**: finish OAuth, token refresh, and cloud-backed favorites or playlist loading through the `/broker` scaffold, with a focus on sources that local control cannot play reliably.
+- **Scene Chaining / Sequences**: allow one scene to trigger another after a delay. For example, "Dinner Party" could start with jazz at conversation volume, then switch to a louder "Party" scene later.
+- **Conditional Logic / Smart Scenes**: add lightweight rules such as quiet volumes after 10 PM, skipping a room that is already playing, or avoiding music scenes while TV audio is active.
+- **Portable Speaker Awareness**: detect portable-speaker availability and battery status where possible, so scenes can skip Move or Roam speakers that are offline, Bluetooth-connected, or low on battery.
+- **Import / Export and Scene Templates**: support JSON import/export for portability and add starter templates such as "Whole House Party" or "Bedtime Wind-Down."
+
+### Differentiating Polish (v0.4.x+): Why This Plugin
+
+- **Activity History & Scene Analytics**: show recent scene runs, trigger source, success or failure, and useful debugging details in the Homebridge UI.
+- **Clone Scene & Batch Edit**: make it easier to duplicate a scene, tweak it, or update shared settings across several scenes at once.
+- **Dynamic Favorite Health Checks**: periodically validate that saved favorites still exist and are playable, then warn in the UI before a user clicks `Run Test`.
+- **AirPlay Receiver Prep Scenes**: configure rooms as ready-to-use AirPlay targets without starting playback, so users can hand off from an iPhone or Mac after the scene prepares grouping and volume.
+- **Per-Accessory Room Assignment**: let users choose where companion HomeKit accessories, such as scene volume controls, should appear in Apple Home.
+
+### Ecosystem & Community
+
+- **Migration Assistant from homebridge-zp**: provide a best-effort helper that translates common `homebridge-zp` zones, favorites, or grouping patterns into starting-point scenes.
+- **Mobile-First UI Pass**: improve the custom UI for phone-sized Homebridge screens, especially the scene editor and virtual-room workspace.
+- **Better Error Recovery & Partial Success**: make scene execution more resilient when one room fails, with clearer logging, safer continuation where possible, and optional rollback or cleanup for half-applied scenes.
 
 ## Install
 
