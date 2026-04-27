@@ -176,6 +176,31 @@ test("SceneSwitchAccessory keeps HomeKit name fields in sync when a scene is ren
   assert.equal(service.values.get(fakePlatform.Characteristic.ConfiguredName), "Office Sleep");
 });
 
+test("SceneSwitchAccessory can be marked off by topology reconciliation", async () => {
+  const accessory = new FakeAccessory();
+  const scene = buildScene("Office Bedtime");
+  const platform = {
+    ...fakePlatform,
+    runScene: async () => ({
+      ok: true,
+      sceneId: scene.id,
+      trigger: "on",
+      logs: [],
+      errors: [],
+    }),
+  } as any;
+  const wrapper = new SceneSwitchAccessory(platform, accessory as any, scene);
+  const service = accessory.getService(fakePlatform.Service.Switch)!;
+
+  await service.getCharacteristic(fakePlatform.Characteristic.On).invokeSet(true);
+  assert.equal(wrapper.isOn(), true);
+
+  wrapper.markOffFromReconciliation("group changed");
+
+  assert.equal(wrapper.isOn(), false);
+  assert.equal(service.values.get(fakePlatform.Characteristic.On), false);
+});
+
 test("SceneSpeakerAccessory keeps HomeKit name fields in sync when a scene is renamed", () => {
   const accessory = new FakeAccessory();
   const initialScene = buildScene("Office Bedtime");

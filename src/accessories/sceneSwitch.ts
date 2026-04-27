@@ -47,6 +47,21 @@ export class SceneSwitchAccessory {
     }
   }
 
+  isOn(): boolean {
+    return this.onState;
+  }
+
+  markOffFromReconciliation(reason: string): void {
+    if (!this.onState) {
+      return;
+    }
+
+    this.clearAutoReset();
+    this.onState = false;
+    this.service.updateCharacteristic(this.platform.Characteristic.On, false);
+    this.logger.info(`Scene "${this.scene.name}" marked off after Sonos topology changed: ${reason}.`);
+  }
+
   private syncServiceName(name: string): void {
     this.service.setCharacteristic(this.platform.Characteristic.Name, name);
     this.service.setCharacteristic(this.platform.Characteristic.ConfiguredName, name);

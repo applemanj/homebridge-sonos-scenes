@@ -3,6 +3,7 @@ import { normalizePlatformConfig } from "./config";
 import { DiscoveryService } from "./discoveryService";
 import { StructuredLogger } from "./logger";
 import { SceneRunner } from "./sceneRunner";
+import { matchSceneTopology } from "./sceneStateReconciler";
 import { SceneSpeakerAccessory } from "./accessories/sceneSpeaker";
 import { SceneSwitchAccessory } from "./accessories/sceneSwitch";
 import { VirtualRoomSpeakerAccessory } from "./accessories/virtualRoomSpeaker";
@@ -19,6 +20,8 @@ import { PLATFORM_NAME, PLUGIN_NAME } from "./types";
 
 export { PLATFORM_NAME, PLUGIN_NAME };
 
+const SCENE_RECONCILIATION_INTERVAL_MS = 30_000;
+
 export class SonosScenesPlatform implements DynamicPlatformPlugin {
   public readonly Service;
   public readonly Characteristic;
@@ -33,6 +36,8 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
   private readonly speakerAccessories = new Map<string, SceneSpeakerAccessory>();
   private readonly virtualRoomAccessories = new Map<string, VirtualRoomSpeakerAccessory>();
   private initialDiscoveryComplete = false;
+  private sceneReconciliationTimer?: NodeJS.Timeout;
+  private sceneReconciliationRunning = false;
 
   constructor(
     public readonly log: Logger,
@@ -49,6 +54,9 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
 
     this.api.on("didFinishLaunching", () => {
       void this.syncAccessories();
+    });
+    this.api.on("shutdown", () => {
+      this.stopSceneReconciliation();
     });
   }
 
@@ -260,6 +268,56 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
       this.logger.warn(`Initial discovery failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       this.initialDiscoveryComplete = true;
+      this.startSceneReconciliation();
+    }
+  }
+
+  private startSceneReconciliation(): void {
+    if (this.sceneReconciliationTimer || this.config.scenes.length === 0) {
+      return;
+    }
+
+    this.sceneReconciliationTimer = setInterval(() => {
+      void this.reconcileSceneSwitchStates();
+    }, SCENE_RECONCILIATION_INTERVAL_MS);
+    this.sceneReconciliationTimer.unref?.();
+    this.logger.debug(`Scene state reconciliation enabled every ${SCENE_RECONCILIATION_INTERVAL_MS}ms.`);
+  }
+
+  private stopSceneReconciliation(): void {
+    if (!this.sceneReconciliationTimer) {
+      return;
+    }
+
+    clearInterval(this.sceneReconciliationTimer);
+    this.sceneReconciliationTimer = undefined;
+  }
+
+  private async reconcileSceneSwitchStates(): Promise<void> {
+    const activeSwitches = Array.from(this.switchAccessories.entries()).filter(([, wrapper]) => wrapper.isOn());
+    if (activeSwitches.length === 0 || this.sceneReconciliationRunning) {
+      return;
+    }
+
+    this.sceneReconciliationRunning = true;
+    try {
+      const snapshot = await this.discoveryService.refresh();
+
+      for (const [sceneId, wrapper] of activeSwitches) {
+        const scene = this.getScene(sceneId);
+        if (!scene || !wrapper.isOn()) {
+          continue;
+        }
+
+        const match = matchSceneTopology(scene, snapshot);
+        if (!match.active) {
+          wrapper.markOffFromReconciliation(match.reason ?? "scene grouping no longer matches");
+        }
+      }
+    } catch (error) {
+      this.logger.warn(`Scene state reconciliation failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      this.sceneReconciliationRunning = false;
     }
   }
 
