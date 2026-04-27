@@ -28,8 +28,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check npm version
+        id: package
+        run: |
+          PACKAGE_NAME="$(node -p "require('./package.json').name")"
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          echo "name=${PACKAGE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version=${PACKAGE_VERSION}" >> "$GITHUB_OUTPUT"
+          if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "${PACKAGE_NAME}@${PACKAGE_VERSION} already exists on npm; skipping publish."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "${PACKAGE_NAME}@${PACKAGE_VERSION} is not on npm yet; continuing."
+          fi
+
       - name: Run tests
+        if: steps.package.outputs.published != 'true'
         run: npm test
 
       - name: Publish package
+        if: steps.package.outputs.published != 'true'
         run: npm publish --access public
+
+      - name: Already published
+        if: steps.package.outputs.published == 'true'
+        run: echo "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }} is already published on npm."
