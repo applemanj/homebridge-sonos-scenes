@@ -9,6 +9,7 @@ export class SceneSwitchAccessory {
   private onState = false;
   private resetTimer?: NodeJS.Timeout;
   private operationToken = 0;
+  private pendingOperationToken?: number;
 
   constructor(
     private readonly platform: SonosScenesPlatform,
@@ -52,6 +53,10 @@ export class SceneSwitchAccessory {
     return this.onState;
   }
 
+  isSettling(): boolean {
+    return this.pendingOperationToken !== undefined;
+  }
+
   markOffFromReconciliation(reason: string): void {
     if (!this.onState) {
       return;
@@ -59,9 +64,10 @@ export class SceneSwitchAccessory {
 
     this.clearAutoReset();
     this.operationToken += 1;
+    this.pendingOperationToken = undefined;
     this.onState = false;
     this.service.updateCharacteristic(this.platform.Characteristic.On, false);
-    this.logger.info(`Scene "${this.scene.name}" marked off after Sonos topology changed: ${reason}.`);
+    this.logger.info(`Scene "${this.scene.name}" marked off after Sonos state reconciliation: ${reason}.`);
   }
 
   private syncServiceName(name: string): void {
@@ -76,6 +82,7 @@ export class SceneSwitchAccessory {
   private handleOnSet(value: CharacteristicValue): void {
     const nextState = value === true;
     const token = ++this.operationToken;
+    this.pendingOperationToken = token;
     this.logger.info(`HomeKit requested on=${nextState} for scene "${this.scene.name}".`);
     if (nextState) {
       this.clearAutoReset();
@@ -119,6 +126,8 @@ export class SceneSwitchAccessory {
       this.logger.error(`Scene "${this.scene.name}" failed on trigger: ${error instanceof Error ? error.message : String(error)}`);
       this.onState = false;
       this.service.updateCharacteristic(this.platform.Characteristic.On, false);
+    } finally {
+      this.clearPendingOperation(token);
     }
   }
 
@@ -149,6 +158,14 @@ export class SceneSwitchAccessory {
       this.logger.error(`Scene "${this.scene.name}" failed off trigger: ${error instanceof Error ? error.message : String(error)}`);
       this.onState = true;
       this.service.updateCharacteristic(this.platform.Characteristic.On, true);
+    } finally {
+      this.clearPendingOperation(token);
+    }
+  }
+
+  private clearPendingOperation(token: number): void {
+    if (token === this.pendingOperationToken) {
+      this.pendingOperationToken = undefined;
     }
   }
 

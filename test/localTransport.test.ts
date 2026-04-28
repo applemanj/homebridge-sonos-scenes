@@ -121,6 +121,23 @@ test("LocalSonosTransport updates fixture playback state for pause and stop", as
   assert.equal(group?.playbackState, "PLAYBACK_STATE_IDLE");
 });
 
+test("LocalSonosTransport tracks fixture source URI for line-in scenes", async () => {
+  const transport = new LocalSonosTransport({
+    kind: "local",
+    enableLiveDiscovery: false,
+    discoveryTimeoutMs: 2500,
+    requestTimeoutMs: 5000,
+    allowTvSource: false,
+  });
+
+  await transport.loadLineIn("local-household", "RINCON_PRIMARY_BEDROOM", "RINCON_UPPER_LEVEL", true);
+
+  const snapshot = await transport.discoverTopology();
+  const group = snapshot.households[0].groups.find((item) => item.coordinatorId === "RINCON_PRIMARY_BEDROOM");
+  assert.equal(group?.playbackState, "PLAYBACK_STATE_PLAYING");
+  assert.equal(group?.currentSourceUri, "x-rincon-stream:RINCON_UPPER_LEVEL");
+});
+
 test("LocalSonosTransport reads live channel state from rendering control instead of master values", async () => {
   const householdId = "local-household";
   const playerId = "RINCON_UPPER_LEVEL";
@@ -291,4 +308,35 @@ test("LocalSonosTransport emits transport logs for live channel volume requests 
     collector.entries.some((entry) => entry.message.includes("Sonos get channel volume returned: player=Upper Level")),
     true,
   );
+});
+
+test("LocalSonosTransport bounds slow live runtime state reads", async () => {
+  const transport = new LocalSonosTransport({
+    kind: "local",
+    enableLiveDiscovery: true,
+    discoveryTimeoutMs: 2500,
+    requestTimeoutMs: 1,
+    allowTvSource: false,
+  });
+  const never = new Promise<string>(() => undefined);
+  const startedAt = Date.now();
+
+  const result = await (transport as unknown as {
+    getLiveGroupRuntimeState: (record: unknown) => Promise<{ playbackState?: string; currentSourceUri?: string }>;
+  }).getLiveGroupRuntimeState({
+    device: {
+      getCurrentState: () => never,
+      avTransportService: () => ({
+        GetMediaInfo: () => never,
+      }),
+    },
+    host: "127.0.0.1",
+    port: 1400,
+    householdId: "local-household",
+    zoneAttrs: { CurrentZoneName: "Upper Level" },
+  });
+
+  assert.equal(result.playbackState, "PLAYBACK_STATE_UNKNOWN");
+  assert.equal(result.currentSourceUri, undefined);
+  assert.ok(Date.now() - startedAt < 1_000);
 });

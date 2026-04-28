@@ -294,7 +294,9 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
   }
 
   private async reconcileSceneSwitchStates(): Promise<void> {
-    const activeSwitches = Array.from(this.switchAccessories.entries()).filter(([, wrapper]) => wrapper.isOn());
+    const activeSwitches = Array.from(this.switchAccessories.entries()).filter(
+      ([, wrapper]) => wrapper.isOn() && !wrapper.isSettling(),
+    );
     if (activeSwitches.length === 0 || this.sceneReconciliationRunning) {
       return;
     }
@@ -311,7 +313,9 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
 
         const match = matchSceneTopology(scene, snapshot);
         if (!match.active) {
-          wrapper.markOffFromReconciliation(match.reason ?? "scene grouping no longer matches");
+          const reason = match.reason ?? "scene state no longer matches";
+          this.logger.info(`Scene state reconciliation marked "${scene.name}" off: ${reason}.`);
+          wrapper.markOffFromReconciliation(reason);
         }
       }
     } catch (error) {

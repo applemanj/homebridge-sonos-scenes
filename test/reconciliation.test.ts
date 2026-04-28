@@ -20,6 +20,27 @@ function buildScene(): SceneDefinition {
   };
 }
 
+function buildLineInScene(): SceneDefinition {
+  return {
+    ...buildScene(),
+    source: {
+      kind: "line_in",
+      deviceId: "RINCON_UPPER_LEVEL",
+      playOnCompletion: true,
+    },
+  };
+}
+
+function buildFavoriteScene(favoriteId: string): SceneDefinition {
+  return {
+    ...buildScene(),
+    source: {
+      kind: "favorite",
+      favoriteId,
+    },
+  };
+}
+
 function cloneTopology(): TopologySnapshot {
   return JSON.parse(JSON.stringify(sampleTopology)) as TopologySnapshot;
 }
@@ -97,4 +118,132 @@ test("matchSceneTopology turns inactive when another room joins the scene group"
 
   assert.equal(match.active, false);
   assert.match(match.reason ?? "", /RINCON_OFFICE/);
+});
+
+test("matchSceneTopology keeps a source scene active when source and playback still match", () => {
+  const scene = buildLineInScene();
+  const snapshot = cloneTopology();
+  const household = snapshot.households[0];
+  household.groups = [
+    {
+      id: "GROUP_UPPER_LEVEL",
+      name: "Upper Level",
+      coordinatorId: "RINCON_UPPER_LEVEL",
+      playerIds: ["RINCON_UPPER_LEVEL", "RINCON_PRIMARY_BEDROOM"],
+      playbackState: "PLAYBACK_STATE_PLAYING",
+      currentSourceUri: "x-rincon-stream:RINCON_UPPER_LEVEL",
+    },
+  ];
+
+  assert.deepEqual(matchSceneTopology(scene, snapshot), { active: true });
+});
+
+test("matchSceneTopology turns inactive when source scene playback has stopped", () => {
+  const scene = buildLineInScene();
+  const snapshot = cloneTopology();
+  const household = snapshot.households[0];
+  household.groups = [
+    {
+      id: "GROUP_UPPER_LEVEL",
+      name: "Upper Level",
+      coordinatorId: "RINCON_UPPER_LEVEL",
+      playerIds: ["RINCON_UPPER_LEVEL", "RINCON_PRIMARY_BEDROOM"],
+      playbackState: "PLAYBACK_STATE_IDLE",
+      currentSourceUri: "x-rincon-stream:RINCON_UPPER_LEVEL",
+    },
+  ];
+
+  const match = matchSceneTopology(scene, snapshot);
+
+  assert.equal(match.active, false);
+  assert.match(match.reason ?? "", /playback state/i);
+});
+
+test("matchSceneTopology turns inactive when the source changed outside the plugin", () => {
+  const scene = buildLineInScene();
+  const snapshot = cloneTopology();
+  const household = snapshot.households[0];
+  household.groups = [
+    {
+      id: "GROUP_UPPER_LEVEL",
+      name: "Upper Level",
+      coordinatorId: "RINCON_UPPER_LEVEL",
+      playerIds: ["RINCON_UPPER_LEVEL", "RINCON_PRIMARY_BEDROOM"],
+      playbackState: "PLAYBACK_STATE_PLAYING",
+      currentSourceUri: "x-rincon-stream:RINCON_OTHER_SOURCE",
+    },
+  ];
+
+  const match = matchSceneTopology(scene, snapshot);
+
+  assert.equal(match.active, false);
+  assert.match(match.reason ?? "", /source/i);
+});
+
+test("matchSceneTopology does not turn source scenes off when Sonos omits source details", () => {
+  const scene = buildLineInScene();
+  const snapshot = cloneTopology();
+  const household = snapshot.households[0];
+  household.groups = [
+    {
+      id: "GROUP_UPPER_LEVEL",
+      name: "Upper Level",
+      coordinatorId: "RINCON_UPPER_LEVEL",
+      playerIds: ["RINCON_UPPER_LEVEL", "RINCON_PRIMARY_BEDROOM"],
+      playbackState: "PLAYBACK_STATE_PLAYING",
+    },
+  ];
+
+  assert.deepEqual(matchSceneTopology(scene, snapshot), { active: true });
+});
+
+test("matchSceneTopology does not require active playback when line-in is only staged", () => {
+  const scene: SceneDefinition = {
+    ...buildLineInScene(),
+    source: {
+      kind: "line_in",
+      deviceId: "RINCON_UPPER_LEVEL",
+      playOnCompletion: false,
+    },
+  };
+  const snapshot = cloneTopology();
+  const household = snapshot.households[0];
+  household.groups = [
+    {
+      id: "GROUP_UPPER_LEVEL",
+      name: "Upper Level",
+      coordinatorId: "RINCON_UPPER_LEVEL",
+      playerIds: ["RINCON_UPPER_LEVEL", "RINCON_PRIMARY_BEDROOM"],
+      playbackState: "PLAYBACK_STATE_IDLE",
+      currentSourceUri: "x-rincon-stream:RINCON_UPPER_LEVEL",
+    },
+  ];
+
+  assert.deepEqual(matchSceneTopology(scene, snapshot), { active: true });
+});
+
+test("matchSceneTopology matches favorite source URIs despite case and query-string differences", () => {
+  const scene = buildFavoriteScene("2/13");
+  const snapshot = cloneTopology();
+  const household = snapshot.households[0];
+  household.favorites = [
+    {
+      id: "2/13",
+      name: "Lo-Fi Sunday",
+      transportUri: "x-rincon-cpcontainer:1006206cplaylist%3Apl.7525e7e5e04f44269ce48ae05d39d209?sid=204&flags=8300",
+      playable: true,
+    },
+  ];
+  household.groups = [
+    {
+      id: "GROUP_UPPER_LEVEL",
+      name: "Upper Level",
+      coordinatorId: "RINCON_UPPER_LEVEL",
+      playerIds: ["RINCON_UPPER_LEVEL", "RINCON_PRIMARY_BEDROOM"],
+      playbackState: "PLAYBACK_STATE_PLAYING",
+      currentSourceUri: "x-rincon-cpcontainer:1006206cplaylist%3apl.7525e7e5e04f44269ce48ae05d39d209",
+    },
+  ];
+
+  assert.deepEqual(matchSceneTopology(scene, snapshot), { active: true });
 });

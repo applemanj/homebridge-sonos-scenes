@@ -236,6 +236,33 @@ test("SceneSwitchAccessory reports on immediately while a scene run is pending",
   assert.equal(service.values.get(fakePlatform.Characteristic.On), true);
 });
 
+test("SceneSwitchAccessory exposes settling state while a scene run is pending", async () => {
+  const accessory = new FakeAccessory();
+  const scene = buildScene("Office Bedtime");
+  const run = createDeferred<any>();
+  const platform = {
+    ...fakePlatform,
+    runScene: async () => run.promise,
+  } as any;
+  const wrapper = new SceneSwitchAccessory(platform, accessory as any, scene);
+  const service = accessory.getService(fakePlatform.Service.Switch)!;
+
+  service.getCharacteristic(fakePlatform.Characteristic.On).invokeSet(true);
+
+  assert.equal(wrapper.isSettling(), true);
+
+  run.resolve({
+    ok: true,
+    sceneId: scene.id,
+    trigger: "on",
+    logs: [],
+    errors: [],
+  });
+  await waitForAsyncHandlers();
+
+  assert.equal(wrapper.isSettling(), false);
+});
+
 test("SceneSwitchAccessory ignores stale on completion after the switch is turned off", async () => {
   const accessory = new FakeAccessory();
   const scene = buildScene("Office Bedtime");
@@ -281,6 +308,43 @@ test("SceneSwitchAccessory ignores stale on completion after the switch is turne
 
   assert.equal(wrapper.isOn(), false);
   assert.equal(service.values.get(fakePlatform.Characteristic.On), false);
+});
+
+test("SonosScenesPlatform skips reconciliation for scene switches that are still settling", async () => {
+  const scene = buildScene("Office Bedtime");
+  let refreshed = false;
+  let markedOff = false;
+  const platform = {
+    switchAccessories: new Map([
+      [
+        scene.id,
+        {
+          isOn: () => true,
+          isSettling: () => true,
+          markOffFromReconciliation: () => {
+            markedOff = true;
+          },
+        },
+      ],
+    ]),
+    sceneReconciliationRunning: false,
+    discoveryService: {
+      refresh: async () => {
+        refreshed = true;
+        return { capturedAt: new Date().toISOString(), origin: "fixture", households: [] };
+      },
+    },
+    getScene: () => scene,
+    logger: {
+      info: () => undefined,
+      warn: () => undefined,
+    },
+  };
+
+  await (SonosScenesPlatform.prototype as any).reconcileSceneSwitchStates.call(platform);
+
+  assert.equal(refreshed, false);
+  assert.equal(markedOff, false);
 });
 
 test("SceneSpeakerAccessory keeps HomeKit name fields in sync when a scene is renamed", () => {

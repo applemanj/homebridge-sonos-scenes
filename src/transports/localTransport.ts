@@ -56,6 +56,17 @@ interface SonosChannelAwareDevice extends SonosAudioControls {
   renderingControlService(): SonosChannelRenderingControls;
 }
 
+interface SonosMediaInfo {
+  CurrentURI?: string;
+}
+
+interface SonosPlaybackIntrospection {
+  getCurrentState?(): Promise<string>;
+  avTransportService?(): {
+    GetMediaInfo?(): Promise<SonosMediaInfo>;
+  };
+}
+
 interface FixtureAudioState {
   master: ChannelAudioState;
   left: ChannelAudioState;
@@ -82,6 +93,10 @@ function escapeRegExp(input: string): string {
 function stripNamespacePrefix(input: string): string {
   const separatorIndex = input.indexOf(":");
   return separatorIndex >= 0 ? input.slice(separatorIndex + 1) : input;
+}
+
+function normalizedString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
 function extractAttributeValue(xml: string, tagName: string, attributeName: string): string | undefined {
@@ -341,7 +356,33 @@ function emptyChannelState(): ChannelAudioState {
   };
 }
 
+function normalizeSonosPlaybackState(value: unknown): string {
+  const normalized = normalizedString(value)?.toLowerCase();
+  if (!normalized) {
+    return "PLAYBACK_STATE_UNKNOWN";
+  }
+
+  if (normalized === "playing" || normalized.includes("playback_state_playing")) {
+    return "PLAYBACK_STATE_PLAYING";
+  }
+
+  if (normalized === "paused" || normalized.includes("paused")) {
+    return "PLAYBACK_STATE_PAUSED_PLAYBACK";
+  }
+
+  if (normalized === "stopped" || normalized.includes("stopped") || normalized.includes("idle") || normalized.includes("no_media")) {
+    return "PLAYBACK_STATE_IDLE";
+  }
+
+  if (normalized === "transitioning" || normalized.includes("transitioning")) {
+    return "PLAYBACK_STATE_TRANSITIONING";
+  }
+
+  return "PLAYBACK_STATE_UNKNOWN";
+}
+
 const LIVE_DISCOVERY_TTL_MS = 5_000;
+const LIVE_RUNTIME_STATE_TIMEOUT_MS = 1_500;
 
 export class LocalSonosTransport implements SonosTransport {
   public readonly kind = "local";
@@ -502,6 +543,11 @@ export class LocalSonosTransport implements SonosTransport {
     playOnCompletion = true,
   ): Promise<void> {
     if (this.livePlayers.size === 0) {
+      await this.loadFixtureSnapshot();
+      this.setFixtureGroupRuntime(householdId, coordinatorPlayerId, {
+        playbackState: playOnCompletion ? "PLAYBACK_STATE_PLAYING" : "PLAYBACK_STATE_IDLE",
+        currentSourceUri: `x-rincon-stream:${deviceId}`,
+      });
       this.touchFixture(householdId);
       return;
     }
@@ -516,6 +562,7 @@ export class LocalSonosTransport implements SonosTransport {
       metadata: "",
       onlySetUri: !playOnCompletion,
     });
+    this.invalidateTopologyCache();
     this.logger?.info(
       `Sonos line-in load completed: household=${householdId}, coordinator=${this.playerLogLabel(coordinatorPlayerId)}, sourceDevice=${deviceId}.`,
     );
@@ -523,6 +570,13 @@ export class LocalSonosTransport implements SonosTransport {
 
   async loadFavorite(householdId: string, coordinatorPlayerId: string, favoriteId: string): Promise<void> {
     if (this.livePlayers.size === 0) {
+      await this.loadFixtureSnapshot();
+      const household = this.requireHousehold(this.fixtureState, householdId);
+      const favorite = household.favorites.find((item) => item.id === favoriteId || item.name === favoriteId);
+      this.setFixtureGroupRuntime(householdId, coordinatorPlayerId, {
+        playbackState: "PLAYBACK_STATE_PLAYING",
+        currentSourceUri: favorite ? favorite.transportUri ?? buildFavoriteTransportUri(favorite) ?? favorite.uri : undefined,
+      });
       this.touchFixture(householdId);
       return;
     }
@@ -543,6 +597,7 @@ export class LocalSonosTransport implements SonosTransport {
       uri: transportUri,
       metadata: favorite.metadata ?? "",
     });
+    this.invalidateTopologyCache();
     this.logger?.info(
       `Sonos favorite load completed: household=${householdId}, coordinator=${this.playerLogLabel(coordinatorPlayerId)}, favorite="${favorite.name}" (${favoriteId}).`,
     );
@@ -559,6 +614,11 @@ export class LocalSonosTransport implements SonosTransport {
     }
 
     if (this.livePlayers.size === 0) {
+      await this.loadFixtureSnapshot();
+      this.setFixtureGroupRuntime(householdId, coordinatorPlayerId, {
+        playbackState: playOnCompletion ? "PLAYBACK_STATE_PLAYING" : "PLAYBACK_STATE_IDLE",
+        currentSourceUri: `x-sonos-htastream:${deviceId}:spdif`,
+      });
       this.touchFixture(householdId);
       return;
     }
@@ -572,6 +632,7 @@ export class LocalSonosTransport implements SonosTransport {
       metadata: "",
       onlySetUri: !playOnCompletion,
     });
+    this.invalidateTopologyCache();
     this.logger?.info(
       `Sonos TV load completed: household=${householdId}, coordinator=${this.playerLogLabel(coordinatorPlayerId)}, sourceDevice=${deviceId}.`,
     );
@@ -773,6 +834,7 @@ export class LocalSonosTransport implements SonosTransport {
     this.requireHousehold(snapshot, householdId);
     const coordinator = this.requireLiveRecord(coordinatorPlayerId);
     await this.audioDevice(coordinator.device).pause();
+    this.invalidateTopologyCache();
   }
 
   async stopPlayback(householdId: string, coordinatorPlayerId: string): Promise<void> {
@@ -792,6 +854,7 @@ export class LocalSonosTransport implements SonosTransport {
     this.requireHousehold(snapshot, householdId);
     const coordinator = this.requireLiveRecord(coordinatorPlayerId);
     await coordinator.device.stop();
+    this.invalidateTopologyCache();
   }
 
   async ungroup(householdId: string, coordinatorPlayerId: string, memberPlayerIds?: string[]): Promise<void> {
@@ -917,12 +980,16 @@ export class LocalSonosTransport implements SonosTransport {
             }
           }
 
+          const runtimeState = await this.getLiveGroupRuntimeState(
+            rawGroup.Coordinator ? livePlayers.get(rawGroup.Coordinator) : undefined,
+          );
+
           groups.push({
             id: groupId,
             name: rawGroup.Name ?? players.find((player) => player.id === rawGroup.Coordinator)?.name ?? groupId,
             coordinatorId: rawGroup.Coordinator ?? playerIds[0],
             playerIds,
-            playbackState: "PLAYBACK_STATE_UNKNOWN",
+            ...runtimeState,
           });
         }
 
@@ -947,12 +1014,13 @@ export class LocalSonosTransport implements SonosTransport {
             fixedVolume: false,
             sourceOptions,
           });
+          const runtimeState = await this.getLiveGroupRuntimeState(record);
           groups.push({
             id: `standalone-${fallbackId}`,
             name: record.zoneAttrs?.CurrentZoneName ?? record.host,
             coordinatorId: fallbackId,
             playerIds: [fallbackId],
-            playbackState: "PLAYBACK_STATE_UNKNOWN",
+            ...runtimeState,
           });
           livePlayers.set(fallbackId, record);
         }
@@ -981,6 +1049,60 @@ export class LocalSonosTransport implements SonosTransport {
       };
     } catch {
       return undefined;
+    }
+  }
+
+  private async getLiveGroupRuntimeState(
+    coordinatorRecord: LivePlayerRecord | undefined,
+  ): Promise<Pick<SonosGroup, "playbackState" | "currentSourceUri">> {
+    if (!coordinatorRecord) {
+      return {
+        playbackState: "PLAYBACK_STATE_UNKNOWN",
+      };
+    }
+
+    const device = coordinatorRecord.device as SonosPlaybackIntrospection;
+    const playerLabel = coordinatorRecord.zoneAttrs?.CurrentZoneName ?? coordinatorRecord.host;
+    const [playbackState, mediaInfo] = await Promise.all([
+      this.readLiveRuntimeValue(
+        `${playerLabel} playback state`,
+        () => device.getCurrentState?.(),
+      ),
+      this.readLiveRuntimeValue(
+        `${playerLabel} media info`,
+        () => device.avTransportService?.().GetMediaInfo?.(),
+      ),
+    ]);
+
+    return {
+      playbackState: normalizeSonosPlaybackState(playbackState),
+      currentSourceUri: normalizedString(mediaInfo?.CurrentURI),
+    };
+  }
+
+  private async readLiveRuntimeValue<T>(
+    label: string,
+    readValue: () => Promise<T> | T | undefined,
+  ): Promise<T | undefined> {
+    const timeoutMs = Math.max(250, Math.min(this.config.requestTimeoutMs, LIVE_RUNTIME_STATE_TIMEOUT_MS));
+    let timeout: NodeJS.Timeout | undefined;
+
+    try {
+      return await Promise.race([
+        Promise.resolve().then(readValue),
+        new Promise<undefined>((resolve) => {
+          timeout = setTimeout(() => resolve(undefined), timeoutMs);
+        }),
+      ]);
+    } catch (error) {
+      this.logger?.debug(
+        `Sonos runtime state read skipped for ${label}: ${error instanceof Error ? error.message : String(error)}.`,
+      );
+      return undefined;
+    } finally {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
     }
   }
 
@@ -1169,6 +1291,22 @@ export class LocalSonosTransport implements SonosTransport {
     );
 
     return fallbackFavoritesFromBrowseResult(fallbackResult);
+  }
+
+  private setFixtureGroupRuntime(
+    householdId: string,
+    coordinatorPlayerId: string,
+    runtime: Pick<SonosGroup, "playbackState" | "currentSourceUri">,
+  ): void {
+    const household = this.requireHousehold(this.fixtureState, householdId);
+    const group = household.groups.find((item) => item.coordinatorId === coordinatorPlayerId)
+      ?? household.groups.find((item) => item.playerIds.includes(coordinatorPlayerId));
+    if (!group) {
+      return;
+    }
+
+    group.playbackState = runtime.playbackState;
+    group.currentSourceUri = runtime.currentSourceUri;
   }
 
   private setFixtureGroupMembers(householdId: string, coordinatorPlayerId: string, desiredMembers: string[]): void {

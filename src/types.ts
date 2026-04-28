@@ -201,6 +201,7 @@ export interface SonosGroup {
   coordinatorId: string;
   playerIds: string[];
   playbackState?: string;
+  currentSourceUri?: string;
 }
 
 export interface HouseholdSnapshot {
