@@ -8,6 +8,7 @@ export class SceneSwitchAccessory {
   private readonly logger;
   private onState = false;
   private resetTimer?: NodeJS.Timeout;
+  private operationToken = 0;
 
   constructor(
     private readonly platform: SonosScenesPlatform,
@@ -57,6 +58,7 @@ export class SceneSwitchAccessory {
     }
 
     this.clearAutoReset();
+    this.operationToken += 1;
     this.onState = false;
     this.service.updateCharacteristic(this.platform.Characteristic.On, false);
     this.logger.info(`Scene "${this.scene.name}" marked off after Sonos topology changed: ${reason}.`);
@@ -71,43 +73,83 @@ export class SceneSwitchAccessory {
     return this.onState;
   }
 
-  private async handleOnSet(value: CharacteristicValue): Promise<void> {
+  private handleOnSet(value: CharacteristicValue): void {
     const nextState = value === true;
+    const token = ++this.operationToken;
     this.logger.info(`HomeKit requested on=${nextState} for scene "${this.scene.name}".`);
     if (nextState) {
       this.clearAutoReset();
       this.onState = true;
       this.service.updateCharacteristic(this.platform.Characteristic.On, true);
-
-      const result = await this.platform.runScene(this.scene.id, "on");
-      if (!result.ok) {
-        this.logger.error(`Scene "${this.scene.name}" failed on trigger: ${result.errors.join(" ")}`);
-        this.onState = false;
-        this.service.updateCharacteristic(this.platform.Characteristic.On, false);
-        throw new Error(result.errors.join(" "));
-      }
-
-      this.onState = true;
-      this.service.updateCharacteristic(this.platform.Characteristic.On, true);
-      this.logger.info(`Scene "${this.scene.name}" completed on trigger successfully.`);
-      this.armAutoReset();
+      void this.finishOnTrigger(token);
       return;
     }
 
     this.clearAutoReset();
     this.onState = false;
     this.service.updateCharacteristic(this.platform.Characteristic.On, false);
+    void this.finishOffTrigger(token);
+  }
 
-    const result = await this.platform.runScene(this.scene.id, "off");
-    if (!result.ok) {
-      this.logger.error(`Scene "${this.scene.name}" failed off trigger: ${result.errors.join(" ")}`);
+  private async finishOnTrigger(token: number): Promise<void> {
+    try {
+      const result = await this.platform.runScene(this.scene.id, "on");
+      if (token !== this.operationToken) {
+        this.logger.debug(`Ignoring stale on completion for scene "${this.scene.name}".`);
+        return;
+      }
+
+      if (!result.ok) {
+        this.logger.error(`Scene "${this.scene.name}" failed on trigger: ${result.errors.join(" ")}`);
+        this.onState = false;
+        this.service.updateCharacteristic(this.platform.Characteristic.On, false);
+        return;
+      }
+
       this.onState = true;
       this.service.updateCharacteristic(this.platform.Characteristic.On, true);
-      throw new Error(result.errors.join(" "));
-    }
+      this.logger.info(`Scene "${this.scene.name}" completed on trigger successfully.`);
+      this.armAutoReset();
+    } catch (error) {
+      if (token !== this.operationToken) {
+        this.logger.debug(`Ignoring stale on error for scene "${this.scene.name}".`);
+        return;
+      }
 
-    this.onState = false;
-    this.logger.info(`Scene "${this.scene.name}" completed off trigger successfully.`);
+      this.logger.error(`Scene "${this.scene.name}" failed on trigger: ${error instanceof Error ? error.message : String(error)}`);
+      this.onState = false;
+      this.service.updateCharacteristic(this.platform.Characteristic.On, false);
+    }
+  }
+
+  private async finishOffTrigger(token: number): Promise<void> {
+    try {
+      const result = await this.platform.runScene(this.scene.id, "off");
+      if (token !== this.operationToken) {
+        this.logger.debug(`Ignoring stale off completion for scene "${this.scene.name}".`);
+        return;
+      }
+
+      if (!result.ok) {
+        this.logger.error(`Scene "${this.scene.name}" failed off trigger: ${result.errors.join(" ")}`);
+        this.onState = true;
+        this.service.updateCharacteristic(this.platform.Characteristic.On, true);
+        return;
+      }
+
+      this.onState = false;
+      this.service.updateCharacteristic(this.platform.Characteristic.On, false);
+      this.logger.info(`Scene "${this.scene.name}" completed off trigger successfully.`);
+    } catch (error) {
+      if (token !== this.operationToken) {
+        this.logger.debug(`Ignoring stale off error for scene "${this.scene.name}".`);
+        return;
+      }
+
+      this.logger.error(`Scene "${this.scene.name}" failed off trigger: ${error instanceof Error ? error.message : String(error)}`);
+      this.onState = true;
+      this.service.updateCharacteristic(this.platform.Characteristic.On, true);
+    }
   }
 
   private armAutoReset(): void {

@@ -162,6 +162,12 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
+async function waitForAsyncHandlers(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve);
+  });
+}
+
 test("SceneSwitchAccessory keeps HomeKit name fields in sync when a scene is renamed", () => {
   const accessory = new FakeAccessory();
   const initialScene = buildScene("Office Bedtime");
@@ -196,6 +202,82 @@ test("SceneSwitchAccessory can be marked off by topology reconciliation", async 
   assert.equal(wrapper.isOn(), true);
 
   wrapper.markOffFromReconciliation("group changed");
+
+  assert.equal(wrapper.isOn(), false);
+  assert.equal(service.values.get(fakePlatform.Characteristic.On), false);
+});
+
+test("SceneSwitchAccessory reports on immediately while a scene run is pending", async () => {
+  const accessory = new FakeAccessory();
+  const scene = buildScene("Office Bedtime");
+  const run = createDeferred<any>();
+  const platform = {
+    ...fakePlatform,
+    runScene: async () => run.promise,
+  } as any;
+  const wrapper = new SceneSwitchAccessory(platform, accessory as any, scene);
+  const service = accessory.getService(fakePlatform.Service.Switch)!;
+
+  service.getCharacteristic(fakePlatform.Characteristic.On).invokeSet(true);
+
+  assert.equal(wrapper.isOn(), true);
+  assert.equal(service.values.get(fakePlatform.Characteristic.On), true);
+
+  run.resolve({
+    ok: true,
+    sceneId: scene.id,
+    trigger: "on",
+    logs: [],
+    errors: [],
+  });
+  await waitForAsyncHandlers();
+
+  assert.equal(wrapper.isOn(), true);
+  assert.equal(service.values.get(fakePlatform.Characteristic.On), true);
+});
+
+test("SceneSwitchAccessory ignores stale on completion after the switch is turned off", async () => {
+  const accessory = new FakeAccessory();
+  const scene = buildScene("Office Bedtime");
+  const runs: Array<{ trigger: string; deferred: ReturnType<typeof createDeferred<any>> }> = [];
+  const platform = {
+    ...fakePlatform,
+    runScene: async (_sceneId: string, trigger: string) => {
+      const deferred = createDeferred<any>();
+      runs.push({ trigger, deferred });
+      return deferred.promise;
+    },
+  } as any;
+  const wrapper = new SceneSwitchAccessory(platform, accessory as any, scene);
+  const service = accessory.getService(fakePlatform.Service.Switch)!;
+
+  service.getCharacteristic(fakePlatform.Characteristic.On).invokeSet(true);
+  service.getCharacteristic(fakePlatform.Characteristic.On).invokeSet(false);
+
+  assert.deepEqual(runs.map((run) => run.trigger), ["on", "off"]);
+  assert.equal(wrapper.isOn(), false);
+  assert.equal(service.values.get(fakePlatform.Characteristic.On), false);
+
+  runs[0].deferred.resolve({
+    ok: true,
+    sceneId: scene.id,
+    trigger: "on",
+    logs: [],
+    errors: [],
+  });
+  await waitForAsyncHandlers();
+
+  assert.equal(wrapper.isOn(), false);
+  assert.equal(service.values.get(fakePlatform.Characteristic.On), false);
+
+  runs[1].deferred.resolve({
+    ok: true,
+    sceneId: scene.id,
+    trigger: "off",
+    logs: [],
+    errors: [],
+  });
+  await waitForAsyncHandlers();
 
   assert.equal(wrapper.isOn(), false);
   assert.equal(service.values.get(fakePlatform.Characteristic.On), false);
