@@ -956,13 +956,15 @@
                 <span>Off Behavior</span>
                 <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Off Behavior">
                   ?
-                  <span class="scene-tooltip">What should happen when you turn the HomeKit scene switch off. None leaves the scene running as it is. Ungroup stops playback and splits the member rooms back out.</span>
+                  <span class="scene-tooltip">What should happen when you turn the HomeKit scene switch off. Do Nothing only turns the switch off visually. Pause pauses playback. Stop stops playback. Stop and Ungroup stops playback and splits member rooms back out.</span>
                 </span>
               </span>
             </label>
             <select class="form-select" id="off-behavior">
-              <option value="none">None</option>
-              <option value="ungroup">Ungroup</option>
+              <option value="none">Do Nothing</option>
+              <option value="pause">Pause Playback</option>
+              <option value="stop">Stop Playback</option>
+              <option value="ungroup">Stop and Ungroup</option>
             </select>
           </div>
           </div>

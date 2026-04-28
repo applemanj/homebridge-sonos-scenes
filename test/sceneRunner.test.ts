@@ -91,7 +91,9 @@ class FakeTransport implements SonosTransport {
 
   async setPlayerChannelMuted(): Promise<void> {}
 
-  async pausePlayback(): Promise<void> {}
+  async pausePlayback(_householdId: string, coordinatorPlayerId: string): Promise<void> {
+    this.calls.push(`pausePlayback:${coordinatorPlayerId}`);
+  }
 
   async stopPlayback(_householdId: string, coordinatorPlayerId: string): Promise<void> {
     this.calls.push(`stopPlayback:${coordinatorPlayerId}`);
@@ -188,6 +190,60 @@ test("SceneRunner executes the off ungroup action", async () => {
     "stopPlayback:RINCON_UPPER_LEVEL",
     "ungroup:RINCON_UPPER_LEVEL:RINCON_PRIMARY_BEDROOM",
   ]);
+  assert.equal(transport.discoverCalls, 1);
+});
+
+test("SceneRunner executes the off pause action", async () => {
+  const transport = new FakeTransport();
+  const discovery = new DiscoveryService(transport);
+  const runner = new SceneRunner(discovery, transport, new StructuredLogger("test", "debug"));
+
+  const scene: SceneDefinition = {
+    id: "scene-off-pause",
+    name: "Pause Scene",
+    householdId: "local-household",
+    coordinatorPlayerId: "RINCON_UPPER_LEVEL",
+    memberPlayerIds: [],
+    playerVolumes: [],
+    offBehavior: {
+      kind: "pause",
+    },
+    settleMs: 0,
+    retryCount: 0,
+    retryDelayMs: 0,
+    autoResetMs: 0,
+  };
+
+  const result = await runner.runOff(scene);
+  assert.equal(result.ok, true);
+  assert.deepEqual(transport.calls, ["pausePlayback:RINCON_UPPER_LEVEL"]);
+  assert.equal(transport.discoverCalls, 1);
+});
+
+test("SceneRunner executes the off stop action", async () => {
+  const transport = new FakeTransport();
+  const discovery = new DiscoveryService(transport);
+  const runner = new SceneRunner(discovery, transport, new StructuredLogger("test", "debug"));
+
+  const scene: SceneDefinition = {
+    id: "scene-off-stop",
+    name: "Stop Scene",
+    householdId: "local-household",
+    coordinatorPlayerId: "RINCON_UPPER_LEVEL",
+    memberPlayerIds: [],
+    playerVolumes: [],
+    offBehavior: {
+      kind: "stop",
+    },
+    settleMs: 0,
+    retryCount: 0,
+    retryDelayMs: 0,
+    autoResetMs: 0,
+  };
+
+  const result = await runner.runOff(scene);
+  assert.equal(result.ok, true);
+  assert.deepEqual(transport.calls, ["stopPlayback:RINCON_UPPER_LEVEL"]);
   assert.equal(transport.discoverCalls, 1);
 });
 

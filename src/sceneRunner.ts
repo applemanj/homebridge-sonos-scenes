@@ -221,6 +221,22 @@ export class SceneRunner {
       return;
     }
 
+    if (scene.offBehavior.kind === "pause") {
+      await this.withRetry(scene, "pause playback", () =>
+        this.transport.pausePlayback(scene.householdId, scene.coordinatorPlayerId),
+      );
+      log("info", `Paused playback: ${scene.coordinatorPlayerId}`);
+      return;
+    }
+
+    if (scene.offBehavior.kind === "stop") {
+      await this.withRetry(scene, "stop playback", () =>
+        this.transport.stopPlayback(scene.householdId, scene.coordinatorPlayerId),
+      );
+      log("info", `Stopped playback: ${scene.coordinatorPlayerId}`);
+      return;
+    }
+
     if (scene.offBehavior.kind === "ungroup") {
       await this.withRetry(scene, "stop playback", () =>
         this.transport.stopPlayback(scene.householdId, scene.coordinatorPlayerId),

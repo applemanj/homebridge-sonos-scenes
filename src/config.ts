@@ -88,8 +88,11 @@ function clampVolume(value: number | undefined): number | undefined {
 }
 
 function normalizeOffBehavior(value: unknown): SceneOffBehavior {
-  if (typeof value === "object" && value !== null && "kind" in value && (value as { kind?: string }).kind === "ungroup") {
-    return { kind: "ungroup" };
+  if (typeof value === "object" && value !== null && "kind" in value) {
+    const kind = (value as { kind?: string }).kind;
+    if (kind === "pause" || kind === "stop" || kind === "ungroup") {
+      return { kind };
+    }
   }
 
   return { kind: "none" };

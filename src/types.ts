@@ -40,11 +40,23 @@ export interface OffBehaviorNone {
   kind: "none";
 }
 
+export interface OffBehaviorPause {
+  kind: "pause";
+}
+
+export interface OffBehaviorStop {
+  kind: "stop";
+}
+
 export interface OffBehaviorUngroup {
   kind: "ungroup";
 }
 
-export type SceneOffBehavior = OffBehaviorNone | OffBehaviorUngroup;
+export type SceneOffBehavior =
+  | OffBehaviorNone
+  | OffBehaviorPause
+  | OffBehaviorStop
+  | OffBehaviorUngroup;
 
 export interface VirtualRoomOnBehaviorRestoreLast {
   kind: "restore_last";

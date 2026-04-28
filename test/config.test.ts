@@ -44,6 +44,29 @@ test("normalizePlatformConfig applies defaults and normalizes scenes", () => {
   assert.deepEqual(config.scenes[0].memberPlayerIds, ["player-2", "player-2"]);
   assert.equal(config.scenes[0].retryCount, 3);
   assert.equal(config.scenes[0].autoResetMs, 0);
+  assert.equal(config.scenes[0].offBehavior.kind, "ungroup");
+});
+
+test("normalizePlatformConfig preserves scene pause and stop off behaviors", () => {
+  const config = normalizePlatformConfig({
+    scenes: [
+      {
+        name: "Pause Scene",
+        offBehavior: {
+          kind: "pause",
+        },
+      } as any,
+      {
+        name: "Stop Scene",
+        offBehavior: {
+          kind: "stop",
+        },
+      } as any,
+    ],
+  });
+
+  assert.equal(config.scenes[0].offBehavior.kind, "pause");
+  assert.equal(config.scenes[1].offBehavior.kind, "stop");
 });
 
 test("normalizePlatformConfig preserves future self-hosted broker settings", () => {
