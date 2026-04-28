@@ -82,6 +82,10 @@ export class SceneSpeakerAccessory {
     }
   }
 
+  refreshStateFromSonos(): Promise<void> | undefined {
+    return this.queueRefresh();
+  }
+
   markSceneRunApplied(trigger: SceneTrigger): void {
     if (trigger !== "on" && trigger !== "test") {
       this.scheduleReconciliation(0);
@@ -219,9 +223,9 @@ export class SceneSpeakerAccessory {
     return !this.lastKnownMuted && this.lastKnownVolume > 0;
   }
 
-  private queueRefresh(): void {
+  private queueRefresh(): Promise<void> | undefined {
     if (!this.platform.isInitialDiscoveryComplete() || this.refreshInFlight || this.activeMutations > 0) {
-      return;
+      return this.refreshInFlight;
     }
 
     this.refreshInFlight = this.refreshFromPlatform()
@@ -234,6 +238,8 @@ export class SceneSpeakerAccessory {
       .finally(() => {
         this.refreshInFlight = undefined;
       });
+
+    return this.refreshInFlight;
   }
 
   private scheduleReconciliation(delayMs = 600): void {

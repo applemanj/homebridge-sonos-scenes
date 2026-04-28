@@ -327,6 +327,8 @@ test("SonosScenesPlatform skips reconciliation for scene switches that are still
         },
       ],
     ]),
+    speakerAccessories: new Map(),
+    refreshSceneVolumeAccessories: (SonosScenesPlatform.prototype as any).refreshSceneVolumeAccessories,
     sceneReconciliationRunning: false,
     discoveryService: {
       refresh: async () => {
@@ -345,6 +347,41 @@ test("SonosScenesPlatform skips reconciliation for scene switches that are still
 
   assert.equal(refreshed, false);
   assert.equal(markedOff, false);
+});
+
+test("SonosScenesPlatform refreshes scene volume accessories during reconciliation", async () => {
+  let volumeRefreshed = false;
+  let topologyRefreshed = false;
+  const platform = {
+    switchAccessories: new Map(),
+    speakerAccessories: new Map([
+      [
+        "scene-1",
+        {
+          refreshStateFromSonos: async () => {
+            volumeRefreshed = true;
+          },
+        },
+      ],
+    ]),
+    refreshSceneVolumeAccessories: (SonosScenesPlatform.prototype as any).refreshSceneVolumeAccessories,
+    sceneReconciliationRunning: false,
+    discoveryService: {
+      refresh: async () => {
+        topologyRefreshed = true;
+        return { capturedAt: new Date().toISOString(), origin: "fixture", households: [] };
+      },
+    },
+    logger: {
+      info: () => undefined,
+      warn: () => undefined,
+    },
+  };
+
+  await (SonosScenesPlatform.prototype as any).reconcileSceneSwitchStates.call(platform);
+
+  assert.equal(volumeRefreshed, true);
+  assert.equal(topologyRefreshed, false);
 });
 
 test("SceneSpeakerAccessory keeps HomeKit name fields in sync when a scene is renamed", () => {

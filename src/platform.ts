@@ -299,15 +299,21 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
   }
 
   private async reconcileSceneSwitchStates(): Promise<void> {
-    const activeSwitches = Array.from(this.switchAccessories.entries()).filter(
-      ([, wrapper]) => wrapper.isOn() && !wrapper.isSettling(),
-    );
-    if (activeSwitches.length === 0 || this.sceneReconciliationRunning) {
+    if (this.sceneReconciliationRunning) {
       return;
     }
 
     this.sceneReconciliationRunning = true;
     try {
+      await this.refreshSceneVolumeAccessories();
+
+      const activeSwitches = Array.from(this.switchAccessories.entries()).filter(
+        ([, wrapper]) => wrapper.isOn() && !wrapper.isSettling(),
+      );
+      if (activeSwitches.length === 0) {
+        return;
+      }
+
       const snapshot = await this.discoveryService.refresh();
 
       for (const [sceneId, wrapper] of activeSwitches) {
@@ -328,6 +334,14 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
     } finally {
       this.sceneReconciliationRunning = false;
     }
+  }
+
+  private async refreshSceneVolumeAccessories(): Promise<void> {
+    await Promise.all(
+      Array.from(this.speakerAccessories.values()).map(async (wrapper) => {
+        await wrapper.refreshStateFromSonos();
+      }),
+    );
   }
 
   private syncSwitchAccessory(scene: SceneDefinition, uuid: string): PlatformAccessory {
