@@ -21,6 +21,7 @@ import { PLATFORM_NAME, PLUGIN_NAME } from "./types";
 export { PLATFORM_NAME, PLUGIN_NAME };
 
 const SCENE_RECONCILIATION_INTERVAL_MS = 30_000;
+const SCENE_VOLUME_REFRESH_INTERVAL_MS = 10_000;
 
 export class SonosScenesPlatform implements DynamicPlatformPlugin {
   public readonly Service;
@@ -38,6 +39,8 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
   private initialDiscoveryComplete = false;
   private sceneReconciliationTimer?: NodeJS.Timeout;
   private sceneReconciliationRunning = false;
+  private sceneVolumeRefreshTimer?: NodeJS.Timeout;
+  private sceneVolumeRefreshRunning = false;
 
   constructor(
     public readonly log: Logger,
@@ -57,6 +60,7 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
     });
     this.api.on("shutdown", () => {
       this.stopSceneReconciliation();
+      this.stopSceneVolumeRefresh();
     });
   }
 
@@ -274,6 +278,7 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
     } finally {
       this.initialDiscoveryComplete = true;
       this.startSceneReconciliation();
+      this.startSceneVolumeRefresh();
     }
   }
 
@@ -298,6 +303,27 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
     this.sceneReconciliationTimer = undefined;
   }
 
+  private startSceneVolumeRefresh(): void {
+    if (this.sceneVolumeRefreshTimer || this.speakerAccessories.size === 0) {
+      return;
+    }
+
+    this.sceneVolumeRefreshTimer = setInterval(() => {
+      void this.refreshSceneVolumeAccessories();
+    }, SCENE_VOLUME_REFRESH_INTERVAL_MS);
+    this.sceneVolumeRefreshTimer.unref?.();
+    this.logger.debug(`Scene volume accessory refresh enabled every ${SCENE_VOLUME_REFRESH_INTERVAL_MS}ms.`);
+  }
+
+  private stopSceneVolumeRefresh(): void {
+    if (!this.sceneVolumeRefreshTimer) {
+      return;
+    }
+
+    clearInterval(this.sceneVolumeRefreshTimer);
+    this.sceneVolumeRefreshTimer = undefined;
+  }
+
   private async reconcileSceneSwitchStates(): Promise<void> {
     if (this.sceneReconciliationRunning) {
       return;
@@ -305,8 +331,6 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
 
     this.sceneReconciliationRunning = true;
     try {
-      await this.refreshSceneVolumeAccessories();
-
       const activeSwitches = Array.from(this.switchAccessories.entries()).filter(
         ([, wrapper]) => wrapper.isOn() && !wrapper.isSettling(),
       );
@@ -337,11 +361,20 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
   }
 
   private async refreshSceneVolumeAccessories(): Promise<void> {
-    await Promise.all(
-      Array.from(this.speakerAccessories.values()).map(async (wrapper) => {
-        await wrapper.refreshStateFromSonos();
-      }),
-    );
+    if (this.sceneVolumeRefreshRunning) {
+      return;
+    }
+
+    this.sceneVolumeRefreshRunning = true;
+    try {
+      await Promise.all(
+        Array.from(this.speakerAccessories.values()).map(async (wrapper) => {
+          await wrapper.refreshStateFromSonos();
+        }),
+      );
+    } finally {
+      this.sceneVolumeRefreshRunning = false;
+    }
   }
 
   private syncSwitchAccessory(scene: SceneDefinition, uuid: string): PlatformAccessory {

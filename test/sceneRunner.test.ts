@@ -13,6 +13,14 @@ class FakeTransport implements SonosTransport {
   private topology: TopologySnapshot = JSON.parse(JSON.stringify(sampleTopology));
   private failSetGroupMembersOnce = true;
   failPlayerVolumeFor?: string;
+  readonly playerVolumes = new Map<string, number>([
+    ["RINCON_UPPER_LEVEL", 0],
+    ["RINCON_PRIMARY_BEDROOM", 0],
+  ]);
+  readonly playerMutes = new Map<string, boolean>([
+    ["RINCON_UPPER_LEVEL", false],
+    ["RINCON_PRIMARY_BEDROOM", false],
+  ]);
 
   supportsSource(kind: SceneSourceKind): boolean {
     return kind !== "tv";
@@ -54,8 +62,8 @@ class FakeTransport implements SonosTransport {
 
   async setGroupVolume(): Promise<void> {}
 
-  async getPlayerVolume(): Promise<number> {
-    return 0;
+  async getPlayerVolume(_householdId: string, playerId: string): Promise<number> {
+    return this.playerVolumes.get(playerId) ?? 0;
   }
 
   async setPlayerVolume(_householdId: string, playerId: string, volume: number): Promise<void> {
@@ -63,6 +71,7 @@ class FakeTransport implements SonosTransport {
     if (this.failPlayerVolumeFor === playerId) {
       throw new Error(`volume write failed for ${playerId}`);
     }
+    this.playerVolumes.set(playerId, volume);
   }
 
   async getPlayerChannelVolume(_householdId: string, _playerId: string, _channel: VirtualRoomChannel): Promise<number> {
@@ -77,12 +86,13 @@ class FakeTransport implements SonosTransport {
 
   async setGroupMuted(): Promise<void> {}
 
-  async getPlayerMuted(): Promise<boolean> {
-    return false;
+  async getPlayerMuted(_householdId: string, playerId: string): Promise<boolean> {
+    return this.playerMutes.get(playerId) ?? false;
   }
 
   async setPlayerMuted(_householdId: string, playerId: string, muted: boolean): Promise<void> {
     this.calls.push(`setPlayerMuted:${playerId}:${muted}`);
+    this.playerMutes.set(playerId, muted);
   }
 
   async getPlayerChannelMuted(_householdId: string, _playerId: string, _channel: VirtualRoomChannel): Promise<boolean> {
@@ -245,6 +255,66 @@ test("SceneRunner executes the off stop action", async () => {
   assert.equal(result.ok, true);
   assert.deepEqual(transport.calls, ["stopPlayback:RINCON_UPPER_LEVEL"]);
   assert.equal(transport.discoverCalls, 1);
+});
+
+test("SceneRunner restores captured grouping and volume state on off", async () => {
+  const transport = new FakeTransport();
+  (transport as any).failSetGroupMembersOnce = false;
+  transport.playerVolumes.set("RINCON_UPPER_LEVEL", 12);
+  transport.playerMutes.set("RINCON_UPPER_LEVEL", true);
+  transport.playerVolumes.set("RINCON_PRIMARY_BEDROOM", 34);
+  transport.playerMutes.set("RINCON_PRIMARY_BEDROOM", false);
+  const discovery = new DiscoveryService(transport);
+  const runner = new SceneRunner(discovery, transport, new StructuredLogger("test", "debug"));
+
+  const scene: SceneDefinition = {
+    id: "scene-restore-previous",
+    name: "Restore Previous Scene",
+    householdId: "local-household",
+    coordinatorPlayerId: "RINCON_UPPER_LEVEL",
+    memberPlayerIds: ["RINCON_PRIMARY_BEDROOM"],
+    coordinatorVolume: 20,
+    playerVolumes: [
+      {
+        playerId: "RINCON_PRIMARY_BEDROOM",
+        volume: 16,
+      },
+    ],
+    offBehavior: {
+      kind: "restore_previous",
+    },
+    settleMs: 0,
+    retryCount: 0,
+    retryDelayMs: 0,
+    autoResetMs: 0,
+  };
+
+  const onResult = await runner.runOn(scene);
+  assert.equal(onResult.ok, true);
+  assert.equal(transport.playerVolumes.get("RINCON_UPPER_LEVEL"), 20);
+  assert.equal(transport.playerVolumes.get("RINCON_PRIMARY_BEDROOM"), 16);
+
+  transport.calls.length = 0;
+
+  const offResult = await runner.runOff(scene);
+
+  assert.equal(offResult.ok, true);
+  assert.deepEqual(
+    new Set(transport.calls),
+    new Set([
+      "stopPlayback:RINCON_UPPER_LEVEL",
+      "setGroupMembers:RINCON_UPPER_LEVEL:",
+      "setGroupMembers:RINCON_PRIMARY_BEDROOM:",
+      "setPlayerVolume:RINCON_UPPER_LEVEL:12",
+      "setPlayerMuted:RINCON_UPPER_LEVEL:true",
+      "setPlayerVolume:RINCON_PRIMARY_BEDROOM:34",
+      "setPlayerMuted:RINCON_PRIMARY_BEDROOM:false",
+    ]),
+  );
+  assert.equal(transport.playerVolumes.get("RINCON_UPPER_LEVEL"), 12);
+  assert.equal(transport.playerMutes.get("RINCON_UPPER_LEVEL"), true);
+  assert.equal(transport.playerVolumes.get("RINCON_PRIMARY_BEDROOM"), 34);
+  assert.equal(transport.playerMutes.get("RINCON_PRIMARY_BEDROOM"), false);
 });
 
 test("SceneRunner can load a line-in source from a room that is not in the playback group", async () => {

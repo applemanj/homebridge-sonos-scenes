@@ -52,11 +52,16 @@ export interface OffBehaviorUngroup {
   kind: "ungroup";
 }
 
+export interface OffBehaviorRestorePrevious {
+  kind: "restore_previous";
+}
+
 export type SceneOffBehavior =
   | OffBehaviorNone
   | OffBehaviorPause
   | OffBehaviorStop
-  | OffBehaviorUngroup;
+  | OffBehaviorUngroup
+  | OffBehaviorRestorePrevious;
 
 export interface VirtualRoomOnBehaviorRestoreLast {
   kind: "restore_last";

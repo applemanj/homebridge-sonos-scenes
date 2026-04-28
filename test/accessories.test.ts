@@ -328,7 +328,6 @@ test("SonosScenesPlatform skips reconciliation for scene switches that are still
       ],
     ]),
     speakerAccessories: new Map(),
-    refreshSceneVolumeAccessories: (SonosScenesPlatform.prototype as any).refreshSceneVolumeAccessories,
     sceneReconciliationRunning: false,
     discoveryService: {
       refresh: async () => {
@@ -349,11 +348,10 @@ test("SonosScenesPlatform skips reconciliation for scene switches that are still
   assert.equal(markedOff, false);
 });
 
-test("SonosScenesPlatform refreshes scene volume accessories during reconciliation", async () => {
+test("SonosScenesPlatform refreshes scene volume accessories without refreshing topology", async () => {
   let volumeRefreshed = false;
   let topologyRefreshed = false;
   const platform = {
-    switchAccessories: new Map(),
     speakerAccessories: new Map([
       [
         "scene-1",
@@ -364,8 +362,7 @@ test("SonosScenesPlatform refreshes scene volume accessories during reconciliati
         },
       ],
     ]),
-    refreshSceneVolumeAccessories: (SonosScenesPlatform.prototype as any).refreshSceneVolumeAccessories,
-    sceneReconciliationRunning: false,
+    sceneVolumeRefreshRunning: false,
     discoveryService: {
       refresh: async () => {
         topologyRefreshed = true;
@@ -378,7 +375,7 @@ test("SonosScenesPlatform refreshes scene volume accessories during reconciliati
     },
   };
 
-  await (SonosScenesPlatform.prototype as any).reconcileSceneSwitchStates.call(platform);
+  await (SonosScenesPlatform.prototype as any).refreshSceneVolumeAccessories.call(platform);
 
   assert.equal(volumeRefreshed, true);
   assert.equal(topologyRefreshed, false);

@@ -47,7 +47,7 @@ test("normalizePlatformConfig applies defaults and normalizes scenes", () => {
   assert.equal(config.scenes[0].offBehavior.kind, "ungroup");
 });
 
-test("normalizePlatformConfig preserves scene pause and stop off behaviors", () => {
+test("normalizePlatformConfig preserves scene pause, stop, and restore off behaviors", () => {
   const config = normalizePlatformConfig({
     scenes: [
       {
@@ -62,11 +62,18 @@ test("normalizePlatformConfig preserves scene pause and stop off behaviors", () 
           kind: "stop",
         },
       } as any,
+      {
+        name: "Restore Scene",
+        offBehavior: {
+          kind: "restore_previous",
+        },
+      } as any,
     ],
   });
 
   assert.equal(config.scenes[0].offBehavior.kind, "pause");
   assert.equal(config.scenes[1].offBehavior.kind, "stop");
+  assert.equal(config.scenes[2].offBehavior.kind, "restore_previous");
 });
 
 test("normalizePlatformConfig preserves future self-hosted broker settings", () => {

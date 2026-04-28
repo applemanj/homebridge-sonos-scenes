@@ -6,6 +6,7 @@ import type {
   SceneLogEntry,
   SceneRunResult,
   SceneTrigger,
+  SonosGroup,
   SonosTransport,
   TopologySnapshot,
 } from "./types";
@@ -18,8 +19,26 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+interface PreviousPlayerAudioState {
+  playerId: string;
+  volume: number;
+  muted: boolean;
+}
+
+interface PreviousGroupState {
+  coordinatorPlayerId: string;
+  playerIds: string[];
+}
+
+interface PreviousSceneState {
+  householdId: string;
+  groups: PreviousGroupState[];
+  players: PreviousPlayerAudioState[];
+}
+
 export class SceneRunner {
   private queues = new Map<string, Promise<SceneRunResult>>();
+  private previousSceneStates = new Map<string, PreviousSceneState>();
 
   constructor(
     private readonly discoveryService: DiscoveryService,
@@ -92,6 +111,10 @@ export class SceneRunner {
         await this.executeOff(scene, log);
         log("info", `Scene "${scene.name}" off action complete.`);
         return this.result(true, scene.id, trigger, collector.entries, errors, snapshot);
+      }
+
+      if (trigger === "on" && scene.offBehavior.kind === "restore_previous") {
+        await this.capturePreviousSceneState(scene, snapshot, log);
       }
 
       await this.executeOn(scene, log);
@@ -247,7 +270,125 @@ export class SceneRunner {
         this.transport.ungroup(scene.householdId, scene.coordinatorPlayerId, scene.memberPlayerIds),
       );
       log("info", `Ungrouped members: ${scene.memberPlayerIds.join(", ") || "none"}`);
+      return;
     }
+
+    if (scene.offBehavior.kind === "restore_previous") {
+      await this.restorePreviousSceneState(scene, log);
+    }
+  }
+
+  private async capturePreviousSceneState(
+    scene: SceneDefinition,
+    snapshot: TopologySnapshot,
+    log: (level: "debug" | "info" | "warn" | "error", message: string) => void,
+  ): Promise<void> {
+    const selectedPlayerIds = this.scenePlayerIds(scene);
+    const household = snapshot.households.find((item) => item.id === scene.householdId);
+    if (!household) {
+      log("warn", "Could not capture previous state because the household was not found.");
+      return;
+    }
+
+    const groups = this.groupsTouchingPlayers(household.groups, selectedPlayerIds).map((group) => ({
+      coordinatorPlayerId: group.coordinatorId,
+      playerIds: group.playerIds,
+    }));
+
+    const playerResults = await Promise.allSettled(
+      selectedPlayerIds.map(async (playerId): Promise<PreviousPlayerAudioState> => ({
+        playerId,
+        volume: await this.transport.getPlayerVolume(scene.householdId, playerId),
+        muted: await this.transport.getPlayerMuted(scene.householdId, playerId),
+      })),
+    );
+
+    const players: PreviousPlayerAudioState[] = [];
+    for (const [index, result] of playerResults.entries()) {
+      if (result.status === "fulfilled") {
+        players.push(result.value);
+        continue;
+      }
+
+      log(
+        "warn",
+        `Could not capture previous volume state for ${selectedPlayerIds[index]}: ${
+          result.reason instanceof Error ? result.reason.message : String(result.reason)
+        }`,
+      );
+    }
+
+    this.previousSceneStates.set(scene.id, {
+      householdId: scene.householdId,
+      groups,
+      players,
+    });
+    log(
+      "info",
+      `Captured previous state for restore: ${groups.length} group(s), ${players.length} volume/mute value(s).`,
+    );
+  }
+
+  private async restorePreviousSceneState(
+    scene: SceneDefinition,
+    log: (level: "debug" | "info" | "warn" | "error", message: string) => void,
+  ): Promise<void> {
+    const previous = this.previousSceneStates.get(scene.id);
+
+    await this.withRetry(scene, "stop playback", () =>
+      this.transport.stopPlayback(scene.householdId, scene.coordinatorPlayerId),
+    );
+    log("info", `Stopped playback: ${scene.coordinatorPlayerId}`);
+
+    if (!previous) {
+      log("warn", "No previous state was captured for this scene. Stopped playback, but could not restore grouping or volume.");
+      return;
+    }
+
+    for (const group of previous.groups) {
+      const memberPlayerIds = group.playerIds.filter((playerId) => playerId !== group.coordinatorPlayerId);
+      await this.withRetry(scene, `restore group ${group.coordinatorPlayerId}`, () =>
+        this.transport.setGroupMembers(previous.householdId, group.coordinatorPlayerId, memberPlayerIds),
+      );
+      log("info", `Restored group: ${group.coordinatorPlayerId} with ${memberPlayerIds.join(", ") || "no members"}`);
+    }
+
+    await Promise.all(
+      previous.players.map(async (player) => {
+        await this.withRetry(scene, `restore volume ${player.playerId}`, async () => {
+          await this.transport.setPlayerVolume(previous.householdId, player.playerId, player.volume);
+          await this.transport.setPlayerMuted(previous.householdId, player.playerId, player.muted);
+        });
+        log("info", `Restored volume and mute: ${player.playerId}=${player.volume}, muted=${player.muted}`);
+      }),
+    );
+
+    this.previousSceneStates.delete(scene.id);
+  }
+
+  private scenePlayerIds(scene: SceneDefinition): string[] {
+    return Array.from(new Set([
+      scene.coordinatorPlayerId,
+      ...scene.memberPlayerIds,
+      ...scene.playerVolumes.map((item) => item.playerId),
+    ].filter(Boolean)));
+  }
+
+  private groupsTouchingPlayers(groups: SonosGroup[], playerIds: string[]): SonosGroup[] {
+    const selected = new Set(playerIds);
+    const restoredGroupIds = new Set<string>();
+    const matched: SonosGroup[] = [];
+
+    for (const group of groups) {
+      if (!group.playerIds.some((playerId) => selected.has(playerId)) || restoredGroupIds.has(group.id)) {
+        continue;
+      }
+
+      restoredGroupIds.add(group.id);
+      matched.push(group);
+    }
+
+    return matched;
   }
 
   private async withRetry(scene: SceneDefinition, label: string, action: () => Promise<void>): Promise<void> {

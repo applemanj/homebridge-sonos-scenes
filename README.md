@@ -14,7 +14,7 @@
 - group specific rooms together
 - start a favorite or line-in source
 - set lead-room and per-room volume
-- optionally ungroup the rooms when the scene turns off
+- optionally pause, stop, ungroup, or restore captured grouping and volume state when the scene turns off
 
 It also supports Sonos Amp `virtual rooms` for split-room installs where the left and right speaker channels belong to different spaces.
 
@@ -45,7 +45,7 @@ Typical examples:
 - Friendly scene editor for picking rooms and sources
 - Favorites that are playable over the local Sonos path
 - Line-in scenes
-- Grouping and ungrouping
+- Grouping, ungrouping, and best-effort previous-state restore
 - Background scene switch reconciliation for external Sonos grouping changes
 - Scene test runs before saving
 - Per-room volume overrides
@@ -58,7 +58,7 @@ Typical examples:
 - This is still beta software
 - Some complex Sonos favorites do not work reliably over the local-only path
 - `TV` remains an experimental local option; enable `Show TV input sources` before testing it
-- Scene switch reconciliation currently tracks group membership, not exact source or volume state
+- Previous-state restore does not yet restore the exact prior music source
 - `Local + Cloud` is reserved for future self-hosted broker support and is not wired into playback yet
 - Virtual rooms on the same Amp still share one Sonos playback source
 - External master-volume changes can still affect the perceived loudness of both virtual rooms
