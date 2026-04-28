@@ -361,6 +361,25 @@ test("SceneSpeakerAccessory keeps HomeKit name fields in sync when a scene is re
   assert.equal(service.values.get(fakePlatform.Characteristic.ConfiguredName), "Office Sleep Volume");
 });
 
+test("SceneSpeakerAccessory reflects the configured volume after a scene run", () => {
+  const accessory = new FakeAccessory();
+  const scene = {
+    ...buildScene("Office Test"),
+    coordinatorVolume: 25,
+  };
+  const wrapper = new SceneSpeakerAccessory(fakePlatform, accessory as any, scene);
+  const service = accessory.getService(fakePlatform.Service.Lightbulb)!;
+
+  (wrapper as unknown as { lastKnownVolume: number; lastKnownMuted: boolean }).lastKnownVolume = 13;
+  (wrapper as unknown as { lastKnownVolume: number; lastKnownMuted: boolean }).lastKnownMuted = false;
+  service.updateCharacteristic(fakePlatform.Characteristic.Brightness, 13);
+
+  wrapper.markSceneRunApplied("on");
+
+  assert.equal(service.values.get(fakePlatform.Characteristic.Brightness), 25);
+  assert.equal(service.values.get(fakePlatform.Characteristic.On), true);
+});
+
 test("VirtualRoomSpeakerAccessory coalesces overlapping brightness requests to the latest target", async () => {
   const accessory = new FakeAccessory();
   const room = buildVirtualRoom("Kitchen");

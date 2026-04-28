@@ -1,5 +1,5 @@
 import type { CharacteristicValue, PlatformAccessory, Service } from "homebridge";
-import type { SceneDefinition } from "../types";
+import type { SceneDefinition, SceneTrigger } from "../types";
 import type { SonosScenesPlatform } from "../platform";
 
 export class SceneSpeakerAccessory {
@@ -80,6 +80,31 @@ export class SceneSpeakerAccessory {
     if (previousName !== scene.name) {
       this.logger.info(`Renamed scene volume accessory from "${previousName}" to "${scene.name}".`);
     }
+  }
+
+  markSceneRunApplied(trigger: SceneTrigger): void {
+    if (trigger !== "on" && trigger !== "test") {
+      this.scheduleReconciliation(0);
+      return;
+    }
+
+    if (this.scene.coordinatorVolume === undefined) {
+      this.scheduleReconciliation(0);
+      return;
+    }
+
+    const volume = Math.max(0, Math.min(100, Math.round(this.scene.coordinatorVolume)));
+    this.lastKnownMuted = false;
+    this.lastKnownVolume = volume;
+    if (volume > 0) {
+      this.lastKnownActiveVolume = volume;
+    }
+    this.service.updateCharacteristic(this.platform.Characteristic.Brightness, volume);
+    this.service.updateCharacteristic(this.platform.Characteristic.On, this.isOn());
+    this.logger.debug(
+      `Updated "${this.scene.name}" volume accessory from scene run: on=${this.isOn()}, volume=${this.lastKnownVolume}, muted=${this.lastKnownMuted}.`,
+    );
+    this.scheduleReconciliation();
   }
 
   private displayNameFor(scene: SceneDefinition): string {
@@ -220,6 +245,7 @@ export class SceneSpeakerAccessory {
       this.reconciliationTimer = undefined;
       this.queueRefresh();
     }, delayMs);
+    this.reconciliationTimer.unref?.();
   }
 
   private async refreshFromPlatform(): Promise<void> {

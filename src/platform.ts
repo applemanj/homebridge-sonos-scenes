@@ -76,15 +76,20 @@ export class SonosScenesPlatform implements DynamicPlatformPlugin {
       };
     }
 
+    let result: SceneRunResult;
     if (trigger === "off") {
-      return this.sceneRunner.runOff(scene);
+      result = await this.sceneRunner.runOff(scene);
+    } else if (trigger === "test") {
+      result = await this.sceneRunner.runTest(scene);
+    } else {
+      result = await this.sceneRunner.runOn(scene);
     }
 
-    if (trigger === "test") {
-      return this.sceneRunner.runTest(scene);
+    if (result.ok) {
+      this.speakerAccessories.get(scene.id)?.markSceneRunApplied(trigger);
     }
 
-    return this.sceneRunner.runOn(scene);
+    return result;
   }
 
   getScene(sceneId: string): SceneDefinition | undefined {
