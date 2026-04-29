@@ -920,7 +920,19 @@
             </label>
             <select class="form-select" id="source-target"></select>
           </div>
-          <div class="col-md-4">
+          <div class="col-md-3">
+            <label class="form-label" for="volume-ramp-ms">
+              <span class="scene-label-row">
+                <span>Volume Fade Time (ms)</span>
+                <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Volume Fade Time">
+                  ?
+                  <span class="scene-tooltip">How gently the scene should move rooms with scene volumes to their targets. Use 0 for instant changes, 3000 for a 3-second fade, or longer for bedtime and wake-up scenes.</span>
+                </span>
+              </span>
+            </label>
+            <input class="form-control" id="volume-ramp-ms" type="number" min="0" max="300000">
+          </div>
+          <div class="col-md-3">
             <label class="form-label" for="settle-ms">
               <span class="scene-label-row">
                 <span>Settle Delay (ms)</span>
@@ -932,7 +944,7 @@
             </label>
             <input class="form-control" id="settle-ms" type="number" min="0">
           </div>
-          <div class="col-md-4">
+          <div class="col-md-3">
             <label class="form-label" for="retry-count">
               <span class="scene-label-row">
                 <span>Retry Count</span>
@@ -944,7 +956,7 @@
             </label>
             <input class="form-control" id="retry-count" type="number" min="0">
           </div>
-          <div class="col-md-4">
+          <div class="col-md-3">
             <label class="form-label" for="retry-delay-ms">
               <span class="scene-label-row">
                 <span>Retry Delay (ms)</span>
@@ -1206,6 +1218,7 @@
       sourceTarget: document.getElementById("source-target"),
       sourceTargetLabel: document.getElementById("source-target-label"),
       sourceTargetTooltip: document.getElementById("source-target-tooltip"),
+      volumeRampMs: document.getElementById("volume-ramp-ms"),
       settleMs: document.getElementById("settle-ms"),
       retryCount: document.getElementById("retry-count"),
       retryDelayMs: document.getElementById("retry-delay-ms"),
@@ -1363,6 +1376,7 @@
               ? ""
               : safeScene.coordinatorVolume,
           playerVolumes: Array.isArray(safeScene.playerVolumes) ? safeScene.playerVolumes : [],
+          volumeRampMs: safeScene.volumeRampMs ?? 0,
           offBehavior: safeScene.offBehavior || { kind: "none" },
           settleMs: safeScene.settleMs ?? 750,
           retryCount: safeScene.retryCount ?? 3,
@@ -1678,6 +1692,7 @@
       draft.coordinatorVolume = state.volumeUi.coordinatorEnabled && leadVolumeInput && leadVolumeInput.value !== ""
         ? Number(leadVolumeInput.value)
         : undefined;
+      draft.volumeRampMs = Number(elements.volumeRampMs.value || 0);
       draft.settleMs = Number(elements.settleMs.value || 0);
       draft.retryCount = Number(elements.retryCount.value || 0);
       draft.retryDelayMs = Number(elements.retryDelayMs.value || 0);
@@ -2112,7 +2127,7 @@
                   ${isLeadRoom ? `
                     <div class="scene-member-volume">
                       <div class="scene-member-volume-header">
-                        <label class="scene-member-volume-label" for="lead-volume-${playerId}">Lead Room Volume</label>
+                        <label class="scene-member-volume-label" for="lead-volume-${playerId}">Scene Volume</label>
                         <button
                           class="scene-member-volume-toggle ${leadOverrideEnabled ? "active" : ""}"
                           data-volume-toggle="coordinator"
@@ -2139,7 +2154,7 @@
                   ${isSelected && !isLeadRoom ? `
                     <div class="scene-member-volume">
                       <div class="scene-member-volume-header">
-                        <label class="scene-member-volume-label" for="member-volume-${playerId}">Volume Override</label>
+                        <label class="scene-member-volume-label" for="member-volume-${playerId}">Scene Volume</label>
                         <button
                           class="scene-member-volume-toggle ${memberOverrideEnabled ? "active" : ""}"
                           data-volume-toggle="${playerId}"
@@ -2159,7 +2174,7 @@
                           placeholder="Set volume"
                           value="${memberVolume}">
                       ` : `
-                        <div class="scene-member-volume-note">Leaves this room at whatever volume it already has.</div>
+                        <div class="scene-member-volume-note">Keeps this room at whatever volume it already has.</div>
                       `}
                     </div>
                   ` : ""}
@@ -2423,6 +2438,7 @@
       renderHouseholdOptions();
       renderSourceControls();
       renderMemberOptions();
+      elements.volumeRampMs.value = state.draft.volumeRampMs ?? 0;
       elements.settleMs.value = state.draft.settleMs ?? 750;
       elements.retryCount.value = state.draft.retryCount ?? 3;
       elements.retryDelayMs.value = state.draft.retryDelayMs ?? 750;

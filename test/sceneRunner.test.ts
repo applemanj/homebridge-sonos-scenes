@@ -356,6 +356,43 @@ test("SceneRunner can load a line-in source from a room that is not in the playb
   ]);
 });
 
+test("SceneRunner ramps configured volume overrides when a ramp duration is set", async () => {
+  const transport = new FakeTransport();
+  (transport as any).failSetGroupMembersOnce = false;
+  transport.playerVolumes.set("RINCON_UPPER_LEVEL", 10);
+  const discovery = new DiscoveryService(transport);
+  const runner = new SceneRunner(discovery, transport, new StructuredLogger("test", "debug"));
+
+  const scene: SceneDefinition = {
+    id: "scene-ramped-volume",
+    name: "Ramped Volume",
+    householdId: "local-household",
+    coordinatorPlayerId: "RINCON_UPPER_LEVEL",
+    memberPlayerIds: [],
+    coordinatorVolume: 14,
+    playerVolumes: [],
+    volumeRampMs: 2,
+    offBehavior: {
+      kind: "none",
+    },
+    settleMs: 0,
+    retryCount: 0,
+    retryDelayMs: 0,
+    autoResetMs: 0,
+  };
+
+  const result = await runner.runOn(scene);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(transport.calls, [
+    "setGroupMembers:RINCON_UPPER_LEVEL:",
+    "setPlayerMuted:RINCON_UPPER_LEVEL:false",
+    "setPlayerVolume:RINCON_UPPER_LEVEL:12",
+    "setPlayerVolume:RINCON_UPPER_LEVEL:14",
+  ]);
+  assert.equal(transport.playerVolumes.get("RINCON_UPPER_LEVEL"), 14);
+});
+
 test("SceneRunner surfaces partial failure when one parallel room volume write fails", async () => {
   const transport = new FakeTransport();
   (transport as any).failSetGroupMembersOnce = false;

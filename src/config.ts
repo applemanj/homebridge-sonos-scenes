@@ -87,6 +87,10 @@ function clampVolume(value: number | undefined): number | undefined {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+function normalizeDurationMs(value: unknown, fallback: number, max = Number.MAX_SAFE_INTEGER): number {
+  return Math.max(0, Math.min(max, Math.round(asNumber(value, fallback))));
+}
+
 function normalizeOffBehavior(value: unknown): SceneOffBehavior {
   if (typeof value === "object" && value !== null && "kind" in value) {
     const kind = (value as { kind?: string }).kind;
@@ -178,11 +182,12 @@ export function normalizeScene(scene: Partial<SceneDefinition>): SceneDefinition
           ).values(),
         ).filter((volume) => volume.playerId.length > 0)
       : [],
+    volumeRampMs: normalizeDurationMs(scene.volumeRampMs, 0, 300000),
     offBehavior: normalizeOffBehavior(scene.offBehavior),
-    settleMs: Math.max(0, asNumber(scene.settleMs, 750)),
-    retryCount: Math.max(0, asNumber(scene.retryCount, 3)),
-    retryDelayMs: Math.max(0, asNumber(scene.retryDelayMs, 750)),
-    autoResetMs: Math.max(0, asNumber(scene.autoResetMs, 0)),
+    settleMs: normalizeDurationMs(scene.settleMs, 750),
+    retryCount: Math.max(0, Math.round(asNumber(scene.retryCount, 3))),
+    retryDelayMs: normalizeDurationMs(scene.retryDelayMs, 750),
+    autoResetMs: normalizeDurationMs(scene.autoResetMs, 0),
   };
 }
 
@@ -426,6 +431,10 @@ export function validateSceneDefinition(
 
     if (scene.coordinatorVolume === undefined && scene.playerVolumes.length === 0) {
       result.warnings.push("No volume changes are configured. The scene will only affect grouping and source selection.");
+    }
+
+    if ((scene.volumeRampMs ?? 0) > 0 && scene.coordinatorVolume === undefined && scene.playerVolumes.length === 0) {
+      result.warnings.push("Volume Ramp is set, but no room volume overrides are enabled.");
     }
 
     if (scene.playerVolumes.some((volume) => volume.playerId === scene.coordinatorPlayerId)) {

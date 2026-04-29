@@ -19,6 +19,9 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const VOLUME_RAMP_STEP_MS = 500;
+const MAX_VOLUME_RAMP_STEPS = 30;
+
 interface PreviousPlayerAudioState {
   playerId: string;
   volume: number;
@@ -222,19 +225,76 @@ export class SceneRunner {
         const label = playerId === scene.coordinatorPlayerId && scene.coordinatorVolume !== undefined
           ? `set coordinator volume ${volume}`
           : `set room volume ${playerId}=${volume}`;
-        await this.withRetry(scene, label, async () => {
-          await this.transport.setPlayerVolume(scene.householdId, playerId, volume);
-          await this.transport.setPlayerMuted(scene.householdId, playerId, false);
-        });
+        await this.withRetry(scene, label, () => this.applyPlayerVolume(scene, playerId, volume));
+        const rampMs = scene.volumeRampMs ?? 0;
         if (playerId === scene.coordinatorPlayerId && scene.coordinatorVolume !== undefined) {
-          log("info", `Set coordinator volume and unmuted: ${playerId}=${volume}`);
+          log("info", rampMs > 0
+            ? `Ramped coordinator volume and unmuted over ${rampMs}ms: ${playerId}=${volume}`
+            : `Set coordinator volume and unmuted: ${playerId}=${volume}`);
         } else {
-          log("info", `Set volume and unmuted: ${playerId}=${volume}`);
+          log("info", rampMs > 0
+            ? `Ramped volume and unmuted over ${rampMs}ms: ${playerId}=${volume}`
+            : `Set volume and unmuted: ${playerId}=${volume}`);
         }
       }),
     );
   }
 
+  private async applyPlayerVolume(scene: SceneDefinition, playerId: string, targetVolume: number): Promise<void> {
+    const rampMs = scene.volumeRampMs ?? 0;
+    if (rampMs <= 0) {
+      await this.transport.setPlayerVolume(scene.householdId, playerId, targetVolume);
+      await this.transport.setPlayerMuted(scene.householdId, playerId, false);
+      return;
+    }
+
+    const currentVolume = await this.transport.getPlayerVolume(scene.householdId, playerId);
+    const steps = this.volumeRampSteps(currentVolume, targetVolume, rampMs);
+    if (steps.length === 0) {
+      await this.transport.setPlayerMuted(scene.householdId, playerId, false);
+      return;
+    }
+
+    if (currentVolume <= targetVolume) {
+      await this.transport.setPlayerMuted(scene.householdId, playerId, false);
+    }
+
+    const delayMs = Math.floor(rampMs / steps.length);
+    for (const [index, volume] of steps.entries()) {
+      await this.transport.setPlayerVolume(scene.householdId, playerId, volume);
+      if (index < steps.length - 1) {
+        await sleep(delayMs);
+      }
+    }
+
+    if (currentVolume > targetVolume) {
+      await this.transport.setPlayerMuted(scene.householdId, playerId, false);
+    }
+  }
+
+  private volumeRampSteps(currentVolume: number, targetVolume: number, rampMs: number): number[] {
+    const start = Math.max(0, Math.min(100, Math.round(currentVolume)));
+    const target = Math.max(0, Math.min(100, Math.round(targetVolume)));
+    const delta = target - start;
+    if (delta === 0 || rampMs <= 0) {
+      return [];
+    }
+
+    const stepCount = Math.min(
+      MAX_VOLUME_RAMP_STEPS,
+      Math.abs(delta),
+      Math.max(2, Math.ceil(rampMs / VOLUME_RAMP_STEP_MS)),
+    );
+    const steps: number[] = [];
+    for (let index = 1; index <= stepCount; index++) {
+      const volume = Math.round(start + (delta * index) / stepCount);
+      if (steps[steps.length - 1] !== volume) {
+        steps.push(volume);
+      }
+    }
+
+    return steps;
+  }
   private async executeOff(
     scene: SceneDefinition,
     log: (level: "debug" | "info" | "warn" | "error", message: string) => void,

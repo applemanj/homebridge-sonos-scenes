@@ -118,6 +118,7 @@ export interface SceneDefinition {
   source?: SceneSource;
   coordinatorVolume?: number;
   playerVolumes: SceneVolume[];
+  volumeRampMs?: number;
   offBehavior: SceneOffBehavior;
   settleMs: number;
   retryCount: number;

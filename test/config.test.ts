@@ -43,8 +43,32 @@ test("normalizePlatformConfig applies defaults and normalizes scenes", () => {
   assert.equal(config.scenes[0].name, "Kitchen Favorite");
   assert.deepEqual(config.scenes[0].memberPlayerIds, ["player-2", "player-2"]);
   assert.equal(config.scenes[0].retryCount, 3);
+  assert.equal(config.scenes[0].volumeRampMs, 0);
   assert.equal(config.scenes[0].autoResetMs, 0);
   assert.equal(config.scenes[0].offBehavior.kind, "ungroup");
+});
+
+test("normalizePlatformConfig preserves and bounds scene volume ramp duration", () => {
+  const config = normalizePlatformConfig({
+    scenes: [
+      {
+        name: "Gentle Wake",
+        volumeRampMs: 3500,
+      } as any,
+      {
+        name: "Too Long",
+        volumeRampMs: 999999,
+      } as any,
+      {
+        name: "Negative",
+        volumeRampMs: -100,
+      } as any,
+    ],
+  });
+
+  assert.equal(config.scenes[0].volumeRampMs, 3500);
+  assert.equal(config.scenes[1].volumeRampMs, 300000);
+  assert.equal(config.scenes[2].volumeRampMs, 0);
 });
 
 test("normalizePlatformConfig preserves scene pause, stop, and restore off behaviors", () => {

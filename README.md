@@ -13,7 +13,7 @@
 
 - group specific rooms together
 - start a favorite or line-in source
-- set lead-room and per-room volume
+- set lead-room and per-room scene volumes, instantly or with a gentle fade
 - optionally pause, stop, ungroup, or restore captured grouping and volume state when the scene turns off
 
 It also supports Sonos Amp `virtual rooms` for split-room installs where the left and right speaker channels belong to different spaces.
@@ -49,6 +49,7 @@ Typical examples:
 - Background scene switch reconciliation for external Sonos grouping changes
 - Scene test runs before saving
 - Per-room volume overrides
+- Optional scene volume fade time for configured room volumes
 - Virtual rooms for Sonos Amp left and right split-room installs
 - Per-channel on/off plus virtual room volume control
 - Virtual room create, edit, and validation flows in the Homebridge UI
@@ -73,7 +74,7 @@ This roadmap is meant to show the direction of the project, not lock every featu
 
 - **TV Source General Availability**: move local TV input scenes out of the advanced/experimental toggle after broader validation across TV-capable Sonos devices and common home-theater setups.
 - **Scene State Reconciliation**: expand the v0.1.31 group-membership reconciliation into a stronger live-state system, including source and playback-state awareness where Sonos reports those states reliably.
-- **Volume Ramping / Fade-In-Fade-Out**: let scenes move volume gradually instead of jumping instantly, making bedtime, gentle wake, and ambience scenes feel more natural.
+- **Volume Ramping / Fade-In-Fade-Out**: initial per-scene volume fade time is available for configured room volumes; continue tuning cancellation, long fades, and real-world Sonos pacing.
 - **Scene Off = Restore Previous State**: add off behaviors beyond ungrouping, such as pause, stop, restore the prior group topology, or return rooms to a default idle state.
 - **Crossfade, Sleep Timer, and EQ Per Scene**: add optional per-scene playback settings such as crossfade, sleep timer minutes, bass, treble, and loudness, with safeguards so scenes do not leave speakers in surprising states.
 
@@ -117,7 +118,7 @@ Then restart Homebridge.
 4. Name the scene.
 5. Pick the rooms you want in `Scene Rooms`.
 6. Choose a source such as `favorite` or `line in`.
-7. Optionally set room volume values.
+7. Optionally set scene volume values for rooms, and use `Volume Fade Time` if you want those volumes to ease in instead of changing instantly.
 8. Click `Validate` to check the scene without changing playback.
 9. Click `Run Test` to try it on your Sonos system.
 10. Click `Save Scene Changes`.
