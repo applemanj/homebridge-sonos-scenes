@@ -1172,7 +1172,7 @@ export class LocalSonosTransport implements SonosTransport {
   private async getLivePlayerVolume(playerId: string): Promise<number> {
     const player = this.requireLiveRecord(playerId);
     const volume = Math.max(0, Math.min(100, Math.round(await this.audioDevice(player.device).getVolume())));
-    this.logger?.info(`Sonos get volume returned: player=${this.playerLogLabel(playerId)}, volume=${volume}.`);
+    this.logger?.debug(`Sonos get volume returned: player=${this.playerLogLabel(playerId)}, volume=${volume}.`);
     return volume;
   }
 
@@ -1190,7 +1190,7 @@ export class LocalSonosTransport implements SonosTransport {
       0,
       Math.min(100, Math.round(await this.channelAwareDevice(player.device).renderingControlService().GetVolume(channelToken(channel)))),
     );
-    this.logger?.info(
+    this.logger?.debug(
       `Sonos get channel volume returned: player=${this.playerLogLabel(playerId)}, channel=${channel}, volume=${volume}.`,
     );
     return volume;
@@ -1215,7 +1215,7 @@ export class LocalSonosTransport implements SonosTransport {
   private async getLivePlayerMuted(playerId: string): Promise<boolean> {
     const player = this.requireLiveRecord(playerId);
     const muted = await this.audioDevice(player.device).getMuted();
-    this.logger?.info(`Sonos get mute returned: player=${this.playerLogLabel(playerId)}, muted=${muted}.`);
+    this.logger?.debug(`Sonos get mute returned: player=${this.playerLogLabel(playerId)}, muted=${muted}.`);
     return muted;
   }
 
@@ -1229,7 +1229,7 @@ export class LocalSonosTransport implements SonosTransport {
   private async getLivePlayerChannelMuted(playerId: string, channel: VirtualRoomChannel): Promise<boolean> {
     const player = this.requireLiveRecord(playerId);
     const muted = await this.channelAwareDevice(player.device).renderingControlService().GetMute(channelToken(channel));
-    this.logger?.info(
+    this.logger?.debug(
       `Sonos get channel mute returned: player=${this.playerLogLabel(playerId)}, channel=${channel}, muted=${muted}.`,
     );
     return muted;
