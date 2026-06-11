@@ -136,7 +136,7 @@ function buildScene(name: string): SceneDefinition {
   };
 }
 
-function buildVirtualRoom(name: string): VirtualRoomDefinition {
+function buildVirtualRoom(name: string, overrides: Partial<VirtualRoomDefinition> = {}): VirtualRoomDefinition {
   return {
     id: `virtual-room-${name.toLowerCase().replace(/\s+/g, "-")}`,
     name,
@@ -148,6 +148,7 @@ function buildVirtualRoom(name: string): VirtualRoomDefinition {
     onBehavior: { kind: "restore_last" },
     offBehavior: { kind: "mute" },
     lastActiveBehavior: { kind: "none" },
+    ...overrides,
   };
 }
 
@@ -456,6 +457,148 @@ test("VirtualRoomSpeakerAccessory coalesces overlapping brightness requests to t
   assert.equal(service.values.get(fakePlatform.Characteristic.Brightness), 57);
 });
 
+test("VirtualRoomSpeakerAccessory activates with the last known active volume and applies the returned state", async () => {
+  const accessory = new FakeAccessory();
+  const room = buildVirtualRoom("Kitchen");
+  const activateCalls: Array<number | undefined> = [];
+  const platform = {
+    ...fakePlatform,
+    activateVirtualRoom: async (_roomId: string, fallbackVolume?: number) => {
+      activateCalls.push(fallbackVolume);
+      return { on: true, volume: 42, muted: false };
+    },
+  } as any;
+
+  new VirtualRoomSpeakerAccessory(platform, accessory as any, room);
+  const service = accessory.getService(fakePlatform.Service.Lightbulb)!;
+
+  await service.getCharacteristic(fakePlatform.Characteristic.On).invokeSet(true);
+
+  assert.deepEqual(activateCalls, [room.defaultVolume]);
+  assert.equal(service.values.get(fakePlatform.Characteristic.On), true);
+  assert.equal(service.values.get(fakePlatform.Characteristic.Brightness), 42);
+});
+
+test("VirtualRoomSpeakerAccessory remembers the active volume across an off/on cycle", async () => {
+  const accessory = new FakeAccessory();
+  const room = buildVirtualRoom("Kitchen", { offBehavior: { kind: "volume_zero" } });
+  const activateCalls: Array<number | undefined> = [];
+  const platform = {
+    ...fakePlatform,
+    setVirtualRoomVolume: async (_roomId: string, volume: number) => ({ on: true, volume, muted: false }),
+    activateVirtualRoom: async (_roomId: string, fallbackVolume?: number) => {
+      activateCalls.push(fallbackVolume);
+      return { on: true, volume: fallbackVolume ?? 0, muted: false };
+    },
+    deactivateVirtualRoom: async () => ({ on: false, volume: 0, muted: false }),
+  } as any;
+
+  new VirtualRoomSpeakerAccessory(platform, accessory as any, room);
+  const service = accessory.getService(fakePlatform.Service.Lightbulb)!;
+  const on = service.getCharacteristic(fakePlatform.Characteristic.On);
+  const brightness = service.getCharacteristic(fakePlatform.Characteristic.Brightness);
+
+  await brightness.invokeSet(45);
+  await on.invokeSet(false);
+
+  assert.equal(service.values.get(fakePlatform.Characteristic.On), false);
+  assert.equal(service.values.get(fakePlatform.Characteristic.Brightness), 0);
+
+  await on.invokeSet(true);
+
+  assert.deepEqual(activateCalls, [45]);
+  assert.equal(service.values.get(fakePlatform.Characteristic.Brightness), 45);
+});
+
+test("VirtualRoomSpeakerAccessory clamps brightness requests to the room max volume", async () => {
+  const accessory = new FakeAccessory();
+  const room = buildVirtualRoom("Kitchen", { maxVolume: 60 });
+  const volumeCalls: number[] = [];
+  const platform = {
+    ...fakePlatform,
+    setVirtualRoomVolume: async (_roomId: string, volume: number) => {
+      volumeCalls.push(volume);
+      return { on: true, volume, muted: false };
+    },
+  } as any;
+
+  new VirtualRoomSpeakerAccessory(platform, accessory as any, room);
+  const service = accessory.getService(fakePlatform.Service.Lightbulb)!;
+
+  await service.getCharacteristic(fakePlatform.Characteristic.Brightness).invokeSet(100);
+
+  assert.deepEqual(volumeCalls, [60]);
+  assert.equal(service.values.get(fakePlatform.Characteristic.Brightness), 60);
+});
+
+test("VirtualRoomSpeakerAccessory ignores stale mutation results that finish after a newer mutation", async () => {
+  const accessory = new FakeAccessory();
+  const room = buildVirtualRoom("Kitchen");
+  const staleActivate = createDeferred<VirtualRoomState>();
+  const platform = {
+    ...fakePlatform,
+    activateVirtualRoom: async () => staleActivate.promise,
+    setVirtualRoomVolume: async (_roomId: string, volume: number) => ({ on: true, volume, muted: false }),
+  } as any;
+
+  new VirtualRoomSpeakerAccessory(platform, accessory as any, room);
+  const service = accessory.getService(fakePlatform.Service.Lightbulb)!;
+
+  const onSet = service.getCharacteristic(fakePlatform.Characteristic.On).invokeSet(true) as Promise<void>;
+  await service.getCharacteristic(fakePlatform.Characteristic.Brightness).invokeSet(57);
+
+  assert.equal(service.values.get(fakePlatform.Characteristic.Brightness), 57);
+
+  staleActivate.resolve({ on: true, volume: 11, muted: false });
+  await onSet;
+
+  assert.equal(service.values.get(fakePlatform.Characteristic.Brightness), 57);
+  assert.equal(service.values.get(fakePlatform.Characteristic.On), true);
+});
+
+test("VirtualRoomSpeakerAccessory recovers real state after a failed mutation", async () => {
+  const accessory = new FakeAccessory();
+  const room = buildVirtualRoom("Kitchen");
+  const refreshed = createDeferred<void>();
+  const platform = {
+    ...fakePlatform,
+    isInitialDiscoveryComplete: () => true,
+    setVirtualRoomVolume: async () => {
+      throw new Error("amp unreachable");
+    },
+    getVirtualRoomState: async () => {
+      refreshed.resolve();
+      return { on: true, volume: 22, muted: false };
+    },
+  } as any;
+
+  new VirtualRoomSpeakerAccessory(platform, accessory as any, room);
+  const service = accessory.getService(fakePlatform.Service.Lightbulb)!;
+
+  await assert.rejects(
+    Promise.resolve(service.getCharacteristic(fakePlatform.Characteristic.Brightness).invokeSet(50)),
+    /amp unreachable/,
+  );
+
+  await refreshed.promise;
+  await waitForAsyncHandlers();
+
+  assert.equal(service.values.get(fakePlatform.Characteristic.Brightness), 22);
+  assert.equal(service.values.get(fakePlatform.Characteristic.On), true);
+});
+
+test("VirtualRoomSpeakerAccessory keeps HomeKit name fields in sync when a virtual room is renamed", () => {
+  const accessory = new FakeAccessory();
+  const room = buildVirtualRoom("Kitchen");
+  const wrapper = new VirtualRoomSpeakerAccessory(fakePlatform, accessory as any, room);
+
+  wrapper.updateVirtualRoom({ ...room, name: "Pantry" });
+
+  const service = accessory.getService(fakePlatform.Service.Lightbulb)!;
+  assert.equal(accessory.displayName, "Pantry");
+  assert.equal(service.values.get(fakePlatform.Characteristic.Name), "Pantry");
+});
+
 test("SonosScenesPlatform raises master volume when setting a virtual room above the current master", async () => {
   const room = buildVirtualRoom("Kitchen");
   const calls: string[] = [];
@@ -573,4 +716,198 @@ test("SonosScenesPlatform restore-last activation prefers the cached fallback wh
 
   assert.deepEqual(result, { on: true, volume: 41, muted: false });
   assert.equal(calls.includes(`prepare:${room.id}:41:20`), true);
+});
+
+test("SonosScenesPlatform default-volume activation ignores the current channel volume", async () => {
+  const room = buildVirtualRoom("Kitchen", { onBehavior: { kind: "default_volume" }, defaultVolume: 30 });
+  const calls: string[] = [];
+  const fakePlatform = {
+    getRequiredVirtualRoom: () => room,
+    prepareVirtualRoomPlayback: async (
+      selectedRoom: VirtualRoomDefinition,
+      targetVolume: number,
+      currentMasterVolume: number,
+    ) => {
+      calls.push(`prepare:${selectedRoom.id}:${targetVolume}:${currentMasterVolume}`);
+    },
+    transport: {
+      getPlayerChannelVolume: async () => 55,
+      getPlayerVolume: async () => 40,
+      getPlayerChannelMuted: async () => false,
+    },
+  } as any;
+
+  const result = await SonosScenesPlatform.prototype.activateVirtualRoom.call(fakePlatform, room.id, 41);
+
+  assert.deepEqual(result, { on: true, volume: 30, muted: false });
+  assert.deepEqual(calls, [`prepare:${room.id}:30:40`]);
+});
+
+test("SonosScenesPlatform restore-last activation keeps the current volume of an unmuted channel", async () => {
+  const room = buildVirtualRoom("Kitchen");
+  const calls: string[] = [];
+  const fakePlatform = {
+    getRequiredVirtualRoom: () => room,
+    prepareVirtualRoomPlayback: async (
+      selectedRoom: VirtualRoomDefinition,
+      targetVolume: number,
+      currentMasterVolume: number,
+    ) => {
+      calls.push(`prepare:${selectedRoom.id}:${targetVolume}:${currentMasterVolume}`);
+    },
+    transport: {
+      getPlayerChannelVolume: async () => 55,
+      getPlayerVolume: async () => 40,
+      getPlayerChannelMuted: async () => false,
+    },
+  } as any;
+
+  const result = await SonosScenesPlatform.prototype.activateVirtualRoom.call(fakePlatform, room.id, 20);
+
+  assert.deepEqual(result, { on: true, volume: 55, muted: false });
+  assert.deepEqual(calls, [`prepare:${room.id}:55:40`]);
+});
+
+test("SonosScenesPlatform volume-zero deactivation zeroes the channel without muting it", async () => {
+  const room = buildVirtualRoom("Kitchen", { offBehavior: { kind: "volume_zero" } });
+  const calls: string[] = [];
+  const fakePlatform = {
+    getRequiredVirtualRoom: () => room,
+    applyLastActiveBehavior: async () => undefined,
+    transport: {
+      setPlayerChannelVolume: async (
+        _householdId: string,
+        _playerId: string,
+        channel: string,
+        volume: number,
+      ) => {
+        calls.push(`setPlayerChannelVolume:${channel}:${volume}`);
+      },
+      setPlayerChannelMuted: async (
+        _householdId: string,
+        _playerId: string,
+        channel: string,
+        muted: boolean,
+      ) => {
+        calls.push(`setPlayerChannelMuted:${channel}:${muted}`);
+      },
+    },
+  } as any;
+
+  const result = await SonosScenesPlatform.prototype.deactivateVirtualRoom.call(fakePlatform, room.id);
+
+  assert.deepEqual(result, { on: false, volume: 0, muted: false });
+  assert.deepEqual(
+    new Set(calls),
+    new Set(["setPlayerChannelVolume:left:0", "setPlayerChannelMuted:left:false"]),
+  );
+});
+
+function buildLastActivePlatform(
+  rooms: VirtualRoomDefinition[],
+  channelStates: Record<string, { volume: number; muted: boolean }>,
+  calls: string[],
+) {
+  return {
+    getRequiredVirtualRoom: (roomId: string) => rooms.find((room) => room.id === roomId),
+    applyLastActiveBehavior: (SonosScenesPlatform.prototype as any).applyLastActiveBehavior,
+    getSiblingVirtualRooms: (SonosScenesPlatform.prototype as any).getSiblingVirtualRooms,
+    readVirtualRoomState: (SonosScenesPlatform.prototype as any).readVirtualRoomState,
+    config: { virtualRooms: rooms },
+    transport: {
+      getPlayerMuted: async () => false,
+      getPlayerVolume: async () => 40,
+      getPlayerChannelMuted: async (_householdId: string, _playerId: string, channel: string) =>
+        channelStates[channel]?.muted ?? true,
+      getPlayerChannelVolume: async (_householdId: string, _playerId: string, channel: string) =>
+        channelStates[channel]?.volume ?? 0,
+      setPlayerChannelMuted: async (
+        _householdId: string,
+        _playerId: string,
+        channel: string,
+        muted: boolean,
+      ) => {
+        calls.push(`setPlayerChannelMuted:${channel}:${muted}`);
+        if (channelStates[channel]) {
+          channelStates[channel].muted = muted;
+        }
+      },
+      setPlayerChannelVolume: async (
+        _householdId: string,
+        _playerId: string,
+        channel: string,
+        volume: number,
+      ) => {
+        calls.push(`setPlayerChannelVolume:${channel}:${volume}`);
+        if (channelStates[channel]) {
+          channelStates[channel].volume = volume;
+        }
+      },
+      setPlayerMuted: async (_householdId: string, _playerId: string, muted: boolean) => {
+        calls.push(`setPlayerMuted:${muted}`);
+      },
+      pausePlayback: async () => {
+        calls.push("pausePlayback");
+      },
+      stopPlayback: async () => {
+        calls.push("stopPlayback");
+      },
+    },
+  } as any;
+}
+
+test("SonosScenesPlatform skips the last-active behavior while a sibling virtual room is still on", async () => {
+  const left = buildVirtualRoom("Kitchen", { lastActiveBehavior: { kind: "pause" } });
+  const right = buildVirtualRoom("Bathroom", { channel: "right", lastActiveBehavior: { kind: "pause" } });
+  const calls: string[] = [];
+  const channelStates = {
+    left: { volume: 30, muted: false },
+    right: { volume: 40, muted: false },
+  };
+  const fakePlatform = buildLastActivePlatform([left, right], channelStates, calls);
+
+  await SonosScenesPlatform.prototype.deactivateVirtualRoom.call(fakePlatform, left.id);
+
+  assert.equal(calls.includes("pausePlayback"), false);
+});
+
+test("SonosScenesPlatform applies the pause last-active behavior when the final virtual room turns off", async () => {
+  const left = buildVirtualRoom("Kitchen", { lastActiveBehavior: { kind: "pause" } });
+  const right = buildVirtualRoom("Bathroom", { channel: "right", lastActiveBehavior: { kind: "pause" } });
+  const calls: string[] = [];
+  const channelStates = {
+    left: { volume: 30, muted: false },
+    right: { volume: 40, muted: true },
+  };
+  const fakePlatform = buildLastActivePlatform([left, right], channelStates, calls);
+
+  await SonosScenesPlatform.prototype.deactivateVirtualRoom.call(fakePlatform, left.id);
+
+  assert.equal(calls.includes("pausePlayback"), true);
+});
+
+test("SonosScenesPlatform applies the mute-master last-active behavior when the final virtual room turns off", async () => {
+  const left = buildVirtualRoom("Kitchen", { lastActiveBehavior: { kind: "mute_master" } });
+  const calls: string[] = [];
+  const channelStates = {
+    left: { volume: 30, muted: false },
+  };
+  const fakePlatform = buildLastActivePlatform([left], channelStates, calls);
+
+  await SonosScenesPlatform.prototype.deactivateVirtualRoom.call(fakePlatform, left.id);
+
+  assert.equal(calls.includes("setPlayerMuted:true"), true);
+});
+
+test("SonosScenesPlatform applies the stop last-active behavior when the final virtual room turns off", async () => {
+  const left = buildVirtualRoom("Kitchen", { lastActiveBehavior: { kind: "stop" } });
+  const calls: string[] = [];
+  const channelStates = {
+    left: { volume: 30, muted: false },
+  };
+  const fakePlatform = buildLastActivePlatform([left], channelStates, calls);
+
+  await SonosScenesPlatform.prototype.deactivateVirtualRoom.call(fakePlatform, left.id);
+
+  assert.equal(calls.includes("stopPlayback"), true);
 });
