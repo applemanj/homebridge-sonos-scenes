@@ -7,7 +7,7 @@ This page keeps the more technical project details out of the main README.
 - Homebridge dynamic platform plugin
 - One switch accessory per scene
 - One companion volume control accessory per scene
-- Local-first transport built on the community `sonos` package
+- Local-first transport built on `@svrooij/sonos` (sonos-ts), pinned to an exact version because fixes for that library currently ship on its beta dist-tag
 - Custom Homebridge UI for discovery, validation, testing, and scene editing
 
 ## Scene Model
@@ -83,8 +83,7 @@ This repo uses GitHub Actions trusted publishing to publish to npm from a GitHub
 - Some complex favorites are still unreliable over the local-only path
 - `TV` support is still transport-gated and conservative
 - `local_plus_cloud` is not yet wired into runtime playback
-- subscription-driven live refresh is not fully implemented yet
-- `npm audit` reports a high-severity advisory ([GHSA-2p57-rm9w-gvfp](https://github.com/advisories/GHSA-2p57-rm9w-gvfp)) in the transitive `ip` dependency pulled in by `sonos`. No patched `ip` release exists. The flagged code is only reachable through the `sonos` package's UPnP event listener, which this plugin does not start, so the advisory is not exploitable through this plugin today. The longer-term fix under evaluation is moving the local transport to a maintained Sonos library that does not depend on `ip`.
+- subscription-driven live refresh (UPnP eventing via sonos-ts) is planned but intentionally not enabled yet; the event listener requires a configurable port and a polling fallback before it is safe inside a shared Homebridge process
 
 ## References
 

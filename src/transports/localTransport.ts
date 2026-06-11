@@ -1,15 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import {
-  AsyncDeviceDiscovery,
-  Sonos,
-  type SonosBrowseResponse,
-  type SonosBrowseResult,
-  type SonosDeviceDescription,
-  type SonosGroup as RawSonosGroup,
-  type SonosZoneAttrs,
-  type SonosZoneInfo,
-} from "sonos";
+import { SonosDevice, SonosDeviceDiscovery } from "@svrooij/sonos";
 import type { StructuredLogger } from "../logger";
 import { sampleTopology } from "../sampleTopology";
 import type {
@@ -25,46 +16,26 @@ import type {
 } from "../types";
 
 interface LivePlayerRecord {
-  device: Sonos;
+  device: SonosDevice;
   host: string;
   port: number;
   householdId: string;
-  zoneAttrs?: SonosZoneAttrs;
-  zoneInfo?: SonosZoneInfo;
-  description?: SonosDeviceDescription;
+  zoneName?: string;
+  description?: ParsedDeviceDescription;
+}
+
+// Parsed from the raw /xml/device_description.xml because the sonos-ts
+// GetDeviceDescription() helper does not expose the UPnP serviceList, which is
+// the only reliable way to detect a physical line-in (AudioIn service).
+interface ParsedDeviceDescription {
+  modelName?: string;
+  displayName?: string;
+  hasAudioIn: boolean;
 }
 
 interface ChannelAudioState {
   volume: number;
   muted: boolean;
-}
-
-interface SonosAudioControls {
-  getVolume(channel?: string): Promise<number>;
-  setVolume(volume: number, channel?: string): Promise<void>;
-  getMuted(channel?: string): Promise<boolean>;
-  setMuted(muted: boolean, channel?: string): Promise<void>;
-  pause(): Promise<void>;
-}
-
-interface SonosChannelRenderingControls {
-  GetVolume(channel?: string): Promise<number>;
-  GetMute(channel?: string): Promise<boolean>;
-}
-
-interface SonosChannelAwareDevice extends SonosAudioControls {
-  renderingControlService(): SonosChannelRenderingControls;
-}
-
-interface SonosMediaInfo {
-  CurrentURI?: string;
-}
-
-interface SonosPlaybackIntrospection {
-  getCurrentState?(): Promise<string>;
-  avTransportService?(): {
-    GetMediaInfo?(): Promise<SonosMediaInfo>;
-  };
 }
 
 interface FixtureAudioState {
@@ -198,16 +169,6 @@ function normalizeFavorite(favorite: SonosFavorite): SonosFavorite {
   return normalized;
 }
 
-function fallbackFavoritesFromBrowseResult(result: SonosBrowseResult): SonosFavorite[] {
-  return (result.items ?? []).map((favorite) =>
-    normalizeFavorite({
-      id: favorite.id ?? favorite.title ?? favorite.uri ?? randomString(),
-      name: favorite.title ?? favorite.id ?? "Favorite",
-      uri: favorite.uri,
-    }),
-  );
-}
-
 export function parseFavoriteBrowseXml(xml: string): SonosFavorite[] {
   const items = xml.match(/<item\b[\s\S]*?<\/item>/gi) ?? [];
 
@@ -229,24 +190,6 @@ function formatHouseholdDisplayName(householdIndex: number, householdCount: numb
   }
 
   return `Sonos Household ${householdIndex + 1}`;
-}
-
-function extractFirstString(input: unknown): string | undefined {
-  if (typeof input === "string" && input.trim()) {
-    return input.trim();
-  }
-
-  if (!input || typeof input !== "object") {
-    return undefined;
-  }
-
-  for (const value of Object.values(input)) {
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-
-  return undefined;
 }
 
 function normalizeFixtureSnapshot(input: TopologySnapshot): TopologySnapshot {
@@ -280,21 +223,15 @@ function channelToken(channel: VirtualRoomChannel): "LF" | "RF" {
   return channel === "right" ? "RF" : "LF";
 }
 
-function hasService(description: SonosDeviceDescription | undefined, fragment: string): boolean {
-  const services = description?.serviceList?.service;
-  const list = Array.isArray(services) ? services : services ? [services] : [];
-  return list.some((service) => `${service.serviceType ?? ""} ${service.serviceId ?? ""}`.toLowerCase().includes(fragment.toLowerCase()));
-}
-
-function modelLooksTvCapable(description: SonosDeviceDescription | undefined): boolean {
+function modelLooksTvCapable(description: ParsedDeviceDescription | undefined): boolean {
   const model = `${description?.modelName ?? ""} ${description?.displayName ?? ""}`.toLowerCase();
   return /(arc|beam|playbar|playbase|ray|amp)/.test(model);
 }
 
-function detectSourceOptions(description: SonosDeviceDescription | undefined, allowTvSource: boolean): SceneSourceKind[] {
+function detectSourceOptions(description: ParsedDeviceDescription | undefined, allowTvSource: boolean): SceneSourceKind[] {
   const sourceOptions: SceneSourceKind[] = ["favorite"];
 
-  if (hasService(description, "AudioIn")) {
+  if (description?.hasAudioIn) {
     sourceOptions.push("line_in");
   }
 
@@ -305,19 +242,15 @@ function detectSourceOptions(description: SonosDeviceDescription | undefined, al
   return unique(sourceOptions);
 }
 
-function detectCapabilities(description: SonosDeviceDescription | undefined, allowTvSource: boolean): string[] {
+function detectCapabilities(description: ParsedDeviceDescription | undefined, allowTvSource: boolean): string[] {
   const capabilities = ["PLAYBACK"];
-  if (hasService(description, "AudioIn")) {
+  if (description?.hasAudioIn) {
     capabilities.push("LINE_IN");
   }
   if (allowTvSource && modelLooksTvCapable(description)) {
     capabilities.push("TV");
   }
-  if (!hasService(description, "ZoneGroupTopology")) {
-    capabilities.push("AIRPLAY");
-  } else {
-    capabilities.push("AIRPLAY");
-  }
+  capabilities.push("AIRPLAY");
   return capabilities;
 }
 
@@ -331,22 +264,6 @@ function resolveFixturePath(fixturePath: string | undefined): string | undefined
   }
 
   return path.resolve(process.cwd(), fixturePath);
-}
-
-function maybeHostFromLocation(location: string | undefined): { host: string; port: number } | undefined {
-  if (!location) {
-    return undefined;
-  }
-
-  try {
-    const url = new URL(location);
-    return {
-      host: url.hostname,
-      port: Number(url.port || 1400),
-    };
-  } catch {
-    return undefined;
-  }
 }
 
 function emptyChannelState(): ChannelAudioState {
@@ -390,7 +307,7 @@ export class LocalSonosTransport implements SonosTransport {
   private fixtureState = normalizeFixtureSnapshot(sampleTopology);
   private fixturePlayerAudio = buildFixtureAudioState(this.fixtureState);
   private fixtureLoaded = false;
-  private householdRoots = new Map<string, Sonos>();
+  private householdRoots = new Map<string, SonosDevice>();
   private lastSnapshot = normalizeFixtureSnapshot(sampleTopology);
   private liveSnapshotCache?: { snapshot: TopologySnapshot; expiresAt: number };
   private liveDiscoveryInFlight?: Promise<TopologySnapshot | undefined>;
@@ -520,7 +437,12 @@ export class LocalSonosTransport implements SonosTransport {
       }
       this.requirePlayer(household, playerId);
       const playerRecord = this.requireLiveRecord(playerId);
-      await playerRecord.device.joinGroup(coordinator.name);
+      // Joining a group is setting the member's transport to the coordinator's RINCON URI.
+      await playerRecord.device.AVTransportService.SetAVTransportURI({
+        InstanceID: 0,
+        CurrentURI: `x-rincon:${coordinatorPlayerId}`,
+        CurrentURIMetaData: "",
+      });
     }
 
     for (const playerId of membersToRemove) {
@@ -529,7 +451,7 @@ export class LocalSonosTransport implements SonosTransport {
       }
       this.requirePlayer(household, playerId);
       const playerRecord = this.requireLiveRecord(playerId);
-      await playerRecord.device.leaveGroup();
+      await playerRecord.device.AVTransportService.BecomeCoordinatorOfStandaloneGroup();
     }
 
     this.householdRoots.set(householdId, coordinatorRecord.device);
@@ -557,11 +479,7 @@ export class LocalSonosTransport implements SonosTransport {
     this.logger?.info(
       `Sending Sonos line-in load request: household=${householdId}, coordinator=${this.playerLogLabel(coordinatorPlayerId)}, sourceDevice=${deviceId}, playOnCompletion=${playOnCompletion}.`,
     );
-    await coordinator.device.setAVTransportURI({
-      uri: `x-rincon-stream:${deviceId}`,
-      metadata: "",
-      onlySetUri: !playOnCompletion,
-    });
+    await this.setCoordinatorTransportUri(coordinator, `x-rincon-stream:${deviceId}`, "", playOnCompletion);
     this.invalidateTopologyCache();
     this.logger?.info(
       `Sonos line-in load completed: household=${householdId}, coordinator=${this.playerLogLabel(coordinatorPlayerId)}, sourceDevice=${deviceId}.`,
@@ -593,10 +511,7 @@ export class LocalSonosTransport implements SonosTransport {
     this.logger?.info(
       `Sending Sonos favorite load request: household=${householdId}, coordinator=${this.playerLogLabel(coordinatorPlayerId)}, favorite="${favorite.name}" (${favoriteId}), transportUri=${transportUri}.`,
     );
-    await coordinator.device.setAVTransportURI({
-      uri: transportUri,
-      metadata: favorite.metadata ?? "",
-    });
+    await this.setCoordinatorTransportUri(coordinator, transportUri, favorite.metadata ?? "", true);
     this.invalidateTopologyCache();
     this.logger?.info(
       `Sonos favorite load completed: household=${householdId}, coordinator=${this.playerLogLabel(coordinatorPlayerId)}, favorite="${favorite.name}" (${favoriteId}).`,
@@ -627,11 +542,7 @@ export class LocalSonosTransport implements SonosTransport {
     this.logger?.info(
       `Sending Sonos TV load request: household=${householdId}, coordinator=${this.playerLogLabel(coordinatorPlayerId)}, sourceDevice=${deviceId}, playOnCompletion=${playOnCompletion}.`,
     );
-    await coordinator.device.setAVTransportURI({
-      uri: `x-sonos-htastream:${deviceId}:spdif`,
-      metadata: "",
-      onlySetUri: !playOnCompletion,
-    });
+    await this.setCoordinatorTransportUri(coordinator, `x-sonos-htastream:${deviceId}:spdif`, "", playOnCompletion);
     this.invalidateTopologyCache();
     this.logger?.info(
       `Sonos TV load completed: household=${householdId}, coordinator=${this.playerLogLabel(coordinatorPlayerId)}, sourceDevice=${deviceId}.`,
@@ -833,7 +744,7 @@ export class LocalSonosTransport implements SonosTransport {
     const snapshot = await this.discoverTopology();
     this.requireHousehold(snapshot, householdId);
     const coordinator = this.requireLiveRecord(coordinatorPlayerId);
-    await this.audioDevice(coordinator.device).pause();
+    await coordinator.device.AVTransportService.Pause();
     this.invalidateTopologyCache();
   }
 
@@ -853,7 +764,7 @@ export class LocalSonosTransport implements SonosTransport {
     const snapshot = await this.discoverTopology();
     this.requireHousehold(snapshot, householdId);
     const coordinator = this.requireLiveRecord(coordinatorPlayerId);
-    await coordinator.device.stop();
+    await coordinator.device.AVTransportService.Stop();
     this.invalidateTopologyCache();
   }
 
@@ -884,7 +795,7 @@ export class LocalSonosTransport implements SonosTransport {
         continue;
       }
       const player = this.requireLiveRecord(playerId);
-      await player.device.leaveGroup();
+      await player.device.AVTransportService.BecomeCoordinatorOfStandaloneGroup();
     }
 
     this.invalidateTopologyCache();
@@ -892,137 +803,153 @@ export class LocalSonosTransport implements SonosTransport {
 
   private async tryLiveDiscovery(): Promise<TopologySnapshot | undefined> {
     try {
-      const discovery = new AsyncDeviceDiscovery();
-      const devices = await discovery.discoverMultiple({ timeout: this.config.discoveryTimeoutMs });
-      if (!devices.length) {
+      const discovery = new SonosDeviceDiscovery();
+      const timeoutSeconds = Math.max(1, Math.ceil(this.config.discoveryTimeoutMs / 1000));
+      const foundDevices = await discovery.Search(timeoutSeconds);
+      if (!foundDevices.length) {
         return undefined;
       }
 
-      const uniqueDevices = Array.from(
-        new Map(devices.map((device) => [`${device.host}:${device.port}`, device])).values(),
-      );
+      const uniqueHosts = Array.from(new Map(foundDevices.map((found) => [found.host, found])).values());
 
-      const records = await Promise.all(
-        uniqueDevices.map(async (device): Promise<LivePlayerRecord> => {
-          const [zoneAttrs, zoneInfo, description, householdResponse] = await Promise.allSettled([
-            device.getZoneAttrs(),
-            device.getZoneInfo(),
-            device.deviceDescription(),
-            device.devicePropertiesService().GetHouseholdID({}),
-          ]);
-
+      const hostRecords = await Promise.all(
+        uniqueHosts.map(async (found) => {
+          const device = new SonosDevice(found.host, found.port);
+          const householdId = await device.DevicePropertiesService.GetHouseholdID()
+            .then((response) => normalizedString(response.CurrentHouseholdID))
+            .catch(() => undefined);
           return {
+            host: found.host,
+            port: found.port,
             device,
-            host: device.host,
-            port: device.port,
-            householdId:
-              extractFirstString(householdResponse.status === "fulfilled" ? householdResponse.value : undefined)
-              ?? "local-household",
-            zoneAttrs: zoneAttrs.status === "fulfilled" ? zoneAttrs.value : undefined,
-            zoneInfo: zoneInfo.status === "fulfilled" ? zoneInfo.value : undefined,
-            description: description.status === "fulfilled" ? description.value : undefined,
+            householdId: householdId ?? "local-household",
           };
         }),
       );
 
-      const rootsByHousehold = new Map<string, Sonos>();
-      for (const record of records) {
-        if (!rootsByHousehold.has(record.householdId)) {
-          rootsByHousehold.set(record.householdId, record.device);
+      const rootsByHousehold = new Map<string, (typeof hostRecords)[number]>();
+      for (const hostRecord of hostRecords) {
+        if (!rootsByHousehold.has(hostRecord.householdId)) {
+          rootsByHousehold.set(hostRecord.householdId, hostRecord);
         }
       }
 
       const households: HouseholdSnapshot[] = [];
       const livePlayers = new Map<string, LivePlayerRecord>();
 
-      for (const [householdId, root] of rootsByHousehold) {
-        const rawGroups = await root.getAllGroups().catch(() => [] as RawSonosGroup[]);
-        const householdRecords = records.filter((record) => record.householdId === householdId);
-        const householdByHost = new Map(householdRecords.map((record) => [record.host, record]));
+      for (const [householdId, rootRecord] of rootsByHousehold) {
+        const root = rootRecord.device;
+        const zoneGroups = await root.ZoneGroupTopologyService.GetParsedZoneGroupState().catch(() => []);
         const players: SonosPlayer[] = [];
         const groups: SonosGroup[] = [];
 
-        for (const rawGroup of rawGroups) {
-          const groupId = rawGroup.ID ?? `group-${rawGroup.Coordinator ?? Math.random().toString(16).slice(2)}`;
-          const playerIds: string[] = [];
-          const groupMembers = Array.isArray(rawGroup.ZoneGroupMember) ? rawGroup.ZoneGroupMember : [rawGroup.ZoneGroupMember];
+        const memberHosts = new Map<string, number>();
+        for (const zoneGroup of zoneGroups) {
+          for (const member of zoneGroup.members) {
+            memberHosts.set(member.host, member.port);
+          }
+        }
+        const descriptionsByHost = new Map(
+          await Promise.all(
+            Array.from(memberHosts).map(
+              async ([host, port]) => [host, await this.fetchParsedDeviceDescription(host, port)] as const,
+            ),
+          ),
+        );
 
-          for (const member of groupMembers) {
-            const location = maybeHostFromLocation(member.Location);
-            const record = location ? householdByHost.get(location.host) : undefined;
-            const playerId = member.UUID ?? record?.zoneInfo?.SerialNumber ?? record?.host ?? `player-${players.length}`;
+        for (const zoneGroup of zoneGroups) {
+          const groupId = zoneGroup.groupId || `group-${zoneGroup.coordinator.uuid}`;
+          const playerIds: string[] = [];
+
+          for (const member of zoneGroup.members) {
+            const playerId = member.uuid;
             playerIds.push(playerId);
+            const description = descriptionsByHost.get(member.host);
 
             if (!players.some((player) => player.id === playerId)) {
-              const sourceOptions = detectSourceOptions(record?.description, this.config.allowTvSource);
-              const player: SonosPlayer = {
+              players.push({
                 id: playerId,
-                name: member.ZoneName ?? record?.zoneAttrs?.CurrentZoneName ?? record?.host ?? playerId,
-                model: record?.description?.modelName ?? record?.description?.displayName,
-                capabilities: detectCapabilities(record?.description, this.config.allowTvSource),
+                name: member.name,
+                model: description?.modelName ?? description?.displayName,
+                capabilities: detectCapabilities(description, this.config.allowTvSource),
                 deviceIds: unique([playerId]),
                 groupId,
-                isCoordinator: rawGroup.Coordinator === playerId,
+                isCoordinator: zoneGroup.coordinator.uuid === playerId,
                 fixedVolume: false,
-                sourceOptions,
-              };
-              players.push(player);
-            } else {
-              const existing = players.find((player) => player.id === playerId);
-              if (existing) {
-                existing.groupId = groupId;
-                existing.isCoordinator = rawGroup.Coordinator === playerId;
-              }
+                sourceOptions: detectSourceOptions(description, this.config.allowTvSource),
+              });
             }
 
-            if (record) {
-              livePlayers.set(playerId, record);
+            if (!livePlayers.has(playerId)) {
+              livePlayers.set(playerId, {
+                device: new SonosDevice(member.host, member.port, member.uuid),
+                host: member.host,
+                port: member.port,
+                householdId,
+                zoneName: member.name,
+                description,
+              });
             }
           }
 
-          const runtimeState = await this.getLiveGroupRuntimeState(
-            rawGroup.Coordinator ? livePlayers.get(rawGroup.Coordinator) : undefined,
-          );
+          const runtimeState = await this.getLiveGroupRuntimeState(livePlayers.get(zoneGroup.coordinator.uuid));
 
           groups.push({
             id: groupId,
-            name: rawGroup.Name ?? players.find((player) => player.id === rawGroup.Coordinator)?.name ?? groupId,
-            coordinatorId: rawGroup.Coordinator ?? playerIds[0],
+            name: zoneGroup.name || zoneGroup.coordinator.name || groupId,
+            coordinatorId: zoneGroup.coordinator.uuid,
             playerIds,
             ...runtimeState,
           });
         }
 
-        for (const record of householdRecords) {
-          const existingPlayer = players.find(
-            (player) => player.name === record.zoneAttrs?.CurrentZoneName || player.id === record.zoneInfo?.SerialNumber,
-          );
-          if (existingPlayer) {
+        // Devices found over SSDP for this household but missing from its zone
+        // group state still get a standalone entry, like the previous transport.
+        for (const hostRecord of hostRecords) {
+          if (hostRecord.householdId !== householdId || memberHosts.has(hostRecord.host)) {
             continue;
           }
 
-          const fallbackId = record.zoneInfo?.SerialNumber ?? `${record.host}:${record.port}`;
-          const sourceOptions = detectSourceOptions(record.description, this.config.allowTvSource);
+          const [zoneAttrs, zoneInfo] = await Promise.allSettled([
+            hostRecord.device.DevicePropertiesService.GetZoneAttributes(),
+            hostRecord.device.DevicePropertiesService.GetZoneInfo(),
+          ]);
+          const zoneName = zoneAttrs.status === "fulfilled" ? normalizedString(zoneAttrs.value.CurrentZoneName) : undefined;
+          const serialNumber = zoneInfo.status === "fulfilled" ? normalizedString(zoneInfo.value.SerialNumber) : undefined;
+          const fallbackId = serialNumber ?? `${hostRecord.host}:${hostRecord.port}`;
+          if (players.some((player) => player.id === fallbackId || (zoneName !== undefined && player.name === zoneName))) {
+            continue;
+          }
+
+          const description = await this.fetchParsedDeviceDescription(hostRecord.host, hostRecord.port);
           players.push({
             id: fallbackId,
-            name: record.zoneAttrs?.CurrentZoneName ?? record.host,
-            model: record.description?.modelName ?? record.description?.displayName,
-            capabilities: detectCapabilities(record.description, this.config.allowTvSource),
+            name: zoneName ?? hostRecord.host,
+            model: description?.modelName ?? description?.displayName,
+            capabilities: detectCapabilities(description, this.config.allowTvSource),
             deviceIds: [fallbackId],
             groupId: `standalone-${fallbackId}`,
             isCoordinator: true,
             fixedVolume: false,
-            sourceOptions,
+            sourceOptions: detectSourceOptions(description, this.config.allowTvSource),
           });
-          const runtimeState = await this.getLiveGroupRuntimeState(record);
+          const standaloneRecord: LivePlayerRecord = {
+            device: hostRecord.device,
+            host: hostRecord.host,
+            port: hostRecord.port,
+            householdId,
+            zoneName,
+            description,
+          };
+          const runtimeState = await this.getLiveGroupRuntimeState(standaloneRecord);
           groups.push({
             id: `standalone-${fallbackId}`,
-            name: record.zoneAttrs?.CurrentZoneName ?? record.host,
+            name: zoneName ?? hostRecord.host,
             coordinatorId: fallbackId,
             playerIds: [fallbackId],
             ...runtimeState,
           });
-          livePlayers.set(fallbackId, record);
+          livePlayers.set(fallbackId, standaloneRecord);
         }
 
         const favorites = await this.fetchFavorites(root);
@@ -1052,6 +979,25 @@ export class LocalSonosTransport implements SonosTransport {
     }
   }
 
+  private async fetchParsedDeviceDescription(host: string, port: number): Promise<ParsedDeviceDescription | undefined> {
+    try {
+      const response = await fetch(`http://${host}:${port}/xml/device_description.xml`, {
+        signal: AbortSignal.timeout(Math.max(1_000, this.config.requestTimeoutMs)),
+      });
+      if (!response.ok) {
+        return undefined;
+      }
+      const xml = await response.text();
+      return {
+        modelName: extractTagValue(xml, "modelName"),
+        displayName: extractTagValue(xml, "displayName"),
+        hasAudioIn: /service(?:Id)?:AudioIn/i.test(xml),
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
   private async getLiveGroupRuntimeState(
     coordinatorRecord: LivePlayerRecord | undefined,
   ): Promise<Pick<SonosGroup, "playbackState" | "currentSourceUri">> {
@@ -1061,21 +1007,20 @@ export class LocalSonosTransport implements SonosTransport {
       };
     }
 
-    const device = coordinatorRecord.device as SonosPlaybackIntrospection;
-    const playerLabel = coordinatorRecord.zoneAttrs?.CurrentZoneName ?? coordinatorRecord.host;
-    const [playbackState, mediaInfo] = await Promise.all([
+    const playerLabel = coordinatorRecord.zoneName ?? coordinatorRecord.host;
+    const [transportInfo, mediaInfo] = await Promise.all([
       this.readLiveRuntimeValue(
         `${playerLabel} playback state`,
-        () => device.getCurrentState?.(),
+        () => coordinatorRecord.device.AVTransportService.GetTransportInfo(),
       ),
       this.readLiveRuntimeValue(
         `${playerLabel} media info`,
-        () => device.avTransportService?.().GetMediaInfo?.(),
+        () => coordinatorRecord.device.AVTransportService.GetMediaInfo(),
       ),
     ]);
 
     return {
-      playbackState: normalizeSonosPlaybackState(playbackState),
+      playbackState: normalizeSonosPlaybackState(transportInfo?.CurrentTransportState),
       currentSourceUri: normalizedString(mediaInfo?.CurrentURI),
     };
   }
@@ -1169,31 +1114,32 @@ export class LocalSonosTransport implements SonosTransport {
     return record;
   }
 
+  private async setCoordinatorTransportUri(
+    coordinator: LivePlayerRecord,
+    uri: string,
+    metadata: string,
+    playOnCompletion: boolean,
+  ): Promise<void> {
+    await coordinator.device.AVTransportService.SetAVTransportURI({
+      InstanceID: 0,
+      CurrentURI: uri,
+      CurrentURIMetaData: metadata,
+    });
+    if (playOnCompletion) {
+      await coordinator.device.AVTransportService.Play({ InstanceID: 0, Speed: "1" });
+    }
+  }
+
   private async getLivePlayerVolume(playerId: string): Promise<number> {
-    const player = this.requireLiveRecord(playerId);
-    const volume = Math.max(0, Math.min(100, Math.round(await this.audioDevice(player.device).getVolume())));
-    this.logger?.debug(`Sonos get volume returned: player=${this.playerLogLabel(playerId)}, volume=${volume}.`);
-    return volume;
+    return this.getLiveChannelVolume(playerId, "Master");
   }
 
   private async setLivePlayerVolume(playerId: string, volume: number): Promise<void> {
-    const player = this.requireLiveRecord(playerId);
-    const normalizedVolume = Math.max(0, Math.min(100, Math.round(volume)));
-    this.logger?.info(`Sending Sonos set volume request: player=${this.playerLogLabel(playerId)}, volume=${normalizedVolume}.`);
-    await player.device.setVolume(normalizedVolume);
-    this.logger?.info(`Sonos set volume completed: player=${this.playerLogLabel(playerId)}, volume=${normalizedVolume}.`);
+    await this.setLiveChannelVolume(playerId, "Master", volume);
   }
 
   private async getLivePlayerChannelVolume(playerId: string, channel: VirtualRoomChannel): Promise<number> {
-    const player = this.requireLiveRecord(playerId);
-    const volume = Math.max(
-      0,
-      Math.min(100, Math.round(await this.channelAwareDevice(player.device).renderingControlService().GetVolume(channelToken(channel)))),
-    );
-    this.logger?.debug(
-      `Sonos get channel volume returned: player=${this.playerLogLabel(playerId)}, channel=${channel}, volume=${volume}.`,
-    );
-    return volume;
+    return this.getLiveChannelVolume(playerId, channelToken(channel));
   }
 
   private async setLivePlayerChannelVolume(
@@ -1201,38 +1147,19 @@ export class LocalSonosTransport implements SonosTransport {
     channel: VirtualRoomChannel,
     volume: number,
   ): Promise<void> {
-    const player = this.requireLiveRecord(playerId);
-    const normalizedVolume = Math.max(0, Math.min(100, Math.round(volume)));
-    this.logger?.info(
-      `Sending Sonos set channel volume request: player=${this.playerLogLabel(playerId)}, channel=${channel}, volume=${normalizedVolume}.`,
-    );
-    await this.audioDevice(player.device).setVolume(normalizedVolume, channelToken(channel));
-    this.logger?.info(
-      `Sonos set channel volume completed: player=${this.playerLogLabel(playerId)}, channel=${channel}, volume=${normalizedVolume}.`,
-    );
+    await this.setLiveChannelVolume(playerId, channelToken(channel), volume);
   }
 
   private async getLivePlayerMuted(playerId: string): Promise<boolean> {
-    const player = this.requireLiveRecord(playerId);
-    const muted = await this.audioDevice(player.device).getMuted();
-    this.logger?.debug(`Sonos get mute returned: player=${this.playerLogLabel(playerId)}, muted=${muted}.`);
-    return muted;
+    return this.getLiveChannelMuted(playerId, "Master");
   }
 
   private async setLivePlayerMuted(playerId: string, muted: boolean): Promise<void> {
-    const player = this.requireLiveRecord(playerId);
-    this.logger?.info(`Sending Sonos set mute request: player=${this.playerLogLabel(playerId)}, muted=${muted}.`);
-    await this.audioDevice(player.device).setMuted(muted);
-    this.logger?.info(`Sonos set mute completed: player=${this.playerLogLabel(playerId)}, muted=${muted}.`);
+    await this.setLiveChannelMuted(playerId, "Master", muted);
   }
 
   private async getLivePlayerChannelMuted(playerId: string, channel: VirtualRoomChannel): Promise<boolean> {
-    const player = this.requireLiveRecord(playerId);
-    const muted = await this.channelAwareDevice(player.device).renderingControlService().GetMute(channelToken(channel));
-    this.logger?.debug(
-      `Sonos get channel mute returned: player=${this.playerLogLabel(playerId)}, channel=${channel}, muted=${muted}.`,
-    );
-    return muted;
+    return this.getLiveChannelMuted(playerId, channelToken(channel));
   }
 
   private async setLivePlayerChannelMuted(
@@ -1240,13 +1167,57 @@ export class LocalSonosTransport implements SonosTransport {
     channel: VirtualRoomChannel,
     muted: boolean,
   ): Promise<void> {
+    await this.setLiveChannelMuted(playerId, channelToken(channel), muted);
+  }
+
+  private async getLiveChannelVolume(playerId: string, channel: string): Promise<number> {
+    const player = this.requireLiveRecord(playerId);
+    const response = await player.device.RenderingControlService.GetVolume({ InstanceID: 0, Channel: channel });
+    const volume = Math.max(0, Math.min(100, Math.round(response.CurrentVolume)));
+    this.logger?.debug(
+      `Sonos get volume returned: player=${this.playerLogLabel(playerId)}, channel=${channel}, volume=${volume}.`,
+    );
+    return volume;
+  }
+
+  private async setLiveChannelVolume(playerId: string, channel: string, volume: number): Promise<void> {
+    const player = this.requireLiveRecord(playerId);
+    const normalizedVolume = Math.max(0, Math.min(100, Math.round(volume)));
+    this.logger?.info(
+      `Sending Sonos set volume request: player=${this.playerLogLabel(playerId)}, channel=${channel}, volume=${normalizedVolume}.`,
+    );
+    await player.device.RenderingControlService.SetVolume({
+      InstanceID: 0,
+      Channel: channel,
+      DesiredVolume: normalizedVolume,
+    });
+    this.logger?.info(
+      `Sonos set volume completed: player=${this.playerLogLabel(playerId)}, channel=${channel}, volume=${normalizedVolume}.`,
+    );
+  }
+
+  private async getLiveChannelMuted(playerId: string, channel: string): Promise<boolean> {
+    const player = this.requireLiveRecord(playerId);
+    const response = await player.device.RenderingControlService.GetMute({ InstanceID: 0, Channel: channel });
+    const muted = response.CurrentMute === true;
+    this.logger?.debug(
+      `Sonos get mute returned: player=${this.playerLogLabel(playerId)}, channel=${channel}, muted=${muted}.`,
+    );
+    return muted;
+  }
+
+  private async setLiveChannelMuted(playerId: string, channel: string, muted: boolean): Promise<void> {
     const player = this.requireLiveRecord(playerId);
     this.logger?.info(
-      `Sending Sonos set channel mute request: player=${this.playerLogLabel(playerId)}, channel=${channel}, muted=${muted}.`,
+      `Sending Sonos set mute request: player=${this.playerLogLabel(playerId)}, channel=${channel}, muted=${muted}.`,
     );
-    await this.audioDevice(player.device).setMuted(muted, channelToken(channel));
+    await player.device.RenderingControlService.SetMute({
+      InstanceID: 0,
+      Channel: channel,
+      DesiredMute: muted,
+    });
     this.logger?.info(
-      `Sonos set channel mute completed: player=${this.playerLogLabel(playerId)}, channel=${channel}, muted=${muted}.`,
+      `Sonos set mute completed: player=${this.playerLogLabel(playerId)}, channel=${channel}, muted=${muted}.`,
     );
   }
 
@@ -1265,32 +1236,33 @@ export class LocalSonosTransport implements SonosTransport {
     return favorite;
   }
 
-  private async fetchFavorites(root: Sonos): Promise<SonosFavorite[]> {
-    const browseResponse = await root.contentDirectoryService().Browse({
+  private async fetchFavorites(root: SonosDevice): Promise<SonosFavorite[]> {
+    // The raw Browse call (not BrowseParsed) returns the favorite DIDL-Lite XML
+    // untouched, which is required to keep r:resMD/r:description/r:type metadata
+    // for container favorites; sonos-ts's parsed Track model drops those fields.
+    const browseResponse = await root.ContentDirectoryService.Browse({
+      ObjectID: "FV:2",
       BrowseFlag: "BrowseDirectChildren",
       Filter: "*",
-      StartingIndex: "0",
-      RequestedCount: "100",
+      StartingIndex: 0,
+      RequestedCount: 100,
       SortCriteria: "",
-      ObjectID: "FV:2",
-    }).catch(() => undefined as SonosBrowseResponse | undefined);
+    }).catch(() => undefined);
 
     const browseFavorites = typeof browseResponse?.Result === "string" ? parseFavoriteBrowseXml(browseResponse.Result) : [];
     if (browseFavorites.length > 0) {
       return browseFavorites;
     }
 
-    const fallbackResult = await root.getFavorites().catch(
-      () =>
-        ({
-          items: [],
-          returned: "0",
-          total: "0",
-          updateID: "0",
-        }) satisfies SonosBrowseResult,
+    const fallbackResponse = await root.GetFavorites().catch(() => undefined);
+    const fallbackTracks = Array.isArray(fallbackResponse?.Result) ? fallbackResponse.Result : [];
+    return fallbackTracks.map((track) =>
+      normalizeFavorite({
+        id: track.ItemId ?? track.Title ?? track.TrackUri ?? randomString(),
+        name: track.Title ?? track.ItemId ?? "Favorite",
+        uri: track.TrackUri,
+      }),
     );
-
-    return fallbackFavoritesFromBrowseResult(fallbackResult);
   }
 
   private setFixtureGroupRuntime(
@@ -1390,17 +1362,9 @@ export class LocalSonosTransport implements SonosTransport {
     return channel === "right" ? state.right : state.left;
   }
 
-  private audioDevice(device: Sonos): Sonos & SonosAudioControls {
-    return device as Sonos & SonosAudioControls;
-  }
-
-  private channelAwareDevice(device: Sonos): Sonos & SonosChannelAwareDevice {
-    return device as Sonos & SonosChannelAwareDevice;
-  }
-
   private playerLogLabel(playerId: string): string {
     const record = this.livePlayers.get(playerId);
-    const playerName = record?.zoneAttrs?.CurrentZoneName?.trim();
+    const playerName = record?.zoneName?.trim();
     return playerName ? `${playerName} (${playerId})` : playerId;
   }
 }

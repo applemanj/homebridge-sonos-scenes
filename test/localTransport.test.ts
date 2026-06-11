@@ -151,18 +151,16 @@ test("LocalSonosTransport reads live channel state from rendering control instea
   });
 
   const fakeDevice = {
-    getVolume: async () => 88,
-    getMuted: async () => false,
-    renderingControlService: () => ({
-      GetVolume: async (channel = "Master") => {
-        calls.push(`GetVolume:${channel}`);
-        return channel === "LF" ? 23 : 61;
+    RenderingControlService: {
+      GetVolume: async ({ Channel }: { InstanceID: number; Channel: string }) => {
+        calls.push(`GetVolume:${Channel}`);
+        return { CurrentVolume: Channel === "LF" ? 23 : 61 };
       },
-      GetMute: async (channel = "Master") => {
-        calls.push(`GetMute:${channel}`);
-        return channel === "LF";
+      GetMute: async ({ Channel }: { InstanceID: number; Channel: string }) => {
+        calls.push(`GetMute:${Channel}`);
+        return { CurrentMute: Channel === "LF" };
       },
-    }),
+    },
   };
 
   (transport as unknown as {
@@ -232,13 +230,16 @@ test("LocalSonosTransport emits transport logs for live channel volume requests 
   );
 
   const fakeDevice = {
-    setVolume: async (volume: number, channel?: string) => {
-      setVolumeCalls.push(`setVolume:${channel ?? "Master"}:${volume}`);
+    RenderingControlService: {
+      GetVolume: async ({ Channel }: { InstanceID: number; Channel: string }) => ({
+        CurrentVolume: Channel === "LF" ? 27 : 61,
+      }),
+      GetMute: async () => ({ CurrentMute: false }),
+      SetVolume: async ({ Channel, DesiredVolume }: { InstanceID: number; Channel: string; DesiredVolume: number }) => {
+        setVolumeCalls.push(`SetVolume:${Channel}:${DesiredVolume}`);
+        return true;
+      },
     },
-    renderingControlService: () => ({
-      GetVolume: async (channel = "Master") => (channel === "LF" ? 27 : 61),
-      GetMute: async () => false,
-    }),
   };
 
   (transport as unknown as {
@@ -252,7 +253,7 @@ test("LocalSonosTransport emits transport logs for live channel volume requests 
         host: "127.0.0.1",
         port: 1400,
         householdId,
-        zoneAttrs: { CurrentZoneName: "Upper Level" },
+        zoneName: "Upper Level",
       },
     ],
   ]);
@@ -295,17 +296,17 @@ test("LocalSonosTransport emits transport logs for live channel volume requests 
   await transport.setPlayerChannelVolume(householdId, playerId, "left", 27);
   assert.equal(await transport.getPlayerChannelVolume(householdId, playerId, "left"), 27);
 
-  assert.deepEqual(setVolumeCalls, ["setVolume:LF:27"]);
+  assert.deepEqual(setVolumeCalls, ["SetVolume:LF:27"]);
   assert.equal(
-    collector.entries.some((entry) => entry.message.includes("Sending Sonos set channel volume request: player=Upper Level")),
+    collector.entries.some((entry) =>
+      entry.message.includes("Sending Sonos set volume request: player=Upper Level") && entry.message.includes("channel=LF"),
+    ),
     true,
   );
   assert.equal(
-    collector.entries.some((entry) => entry.message.includes("Sonos set channel volume completed: player=Upper Level")),
-    true,
-  );
-  assert.equal(
-    collector.entries.some((entry) => entry.message.includes("Sonos get channel volume returned: player=Upper Level")),
+    collector.entries.some((entry) =>
+      entry.message.includes("Sonos set volume completed: player=Upper Level") && entry.message.includes("channel=LF"),
+    ),
     true,
   );
 });
@@ -325,15 +326,15 @@ test("LocalSonosTransport bounds slow live runtime state reads", async () => {
     getLiveGroupRuntimeState: (record: unknown) => Promise<{ playbackState?: string; currentSourceUri?: string }>;
   }).getLiveGroupRuntimeState({
     device: {
-      getCurrentState: () => never,
-      avTransportService: () => ({
+      AVTransportService: {
+        GetTransportInfo: () => never,
         GetMediaInfo: () => never,
-      }),
+      },
     },
     host: "127.0.0.1",
     port: 1400,
     householdId: "local-household",
-    zoneAttrs: { CurrentZoneName: "Upper Level" },
+    zoneName: "Upper Level",
   });
 
   assert.equal(result.playbackState, "PLAYBACK_STATE_UNKNOWN");

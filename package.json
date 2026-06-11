@@ -43,7 +43,7 @@
   },
   "dependencies": {
     "@homebridge/plugin-ui-utils": "^2.2.3",
-    "sonos": "^1.14.3"
+    "@svrooij/sonos": "2.6.0-beta.13"
   },
   "peerDependencies": {
     "homebridge": "^1.8.0 || ^2.0.0-beta.0 || ^2.1.1-beta.1"
