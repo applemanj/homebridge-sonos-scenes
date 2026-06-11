@@ -9,6 +9,7 @@ import type { SceneDefinition, SceneSourceKind, SonosTransport, TopologySnapshot
 class FakeTransport implements SonosTransport {
   readonly kind = "fake";
   readonly calls: string[] = [];
+  onCall?: (call: string) => void;
   discoverCalls = 0;
   private topology: TopologySnapshot = JSON.parse(JSON.stringify(sampleTopology));
   private failSetGroupMembersOnce = true;
@@ -67,11 +68,13 @@ class FakeTransport implements SonosTransport {
   }
 
   async setPlayerVolume(_householdId: string, playerId: string, volume: number): Promise<void> {
-    this.calls.push(`setPlayerVolume:${playerId}:${volume}`);
+    const call = `setPlayerVolume:${playerId}:${volume}`;
+    this.calls.push(call);
     if (this.failPlayerVolumeFor === playerId) {
       throw new Error(`volume write failed for ${playerId}`);
     }
     this.playerVolumes.set(playerId, volume);
+    this.onCall?.(call);
   }
 
   async getPlayerChannelVolume(_householdId: string, _playerId: string, _channel: VirtualRoomChannel): Promise<number> {
@@ -391,6 +394,106 @@ test("SceneRunner ramps configured volume overrides when a ramp duration is set"
     "setPlayerVolume:RINCON_UPPER_LEVEL:14",
   ]);
   assert.equal(transport.playerVolumes.get("RINCON_UPPER_LEVEL"), 14);
+});
+
+test("SceneRunner cancels an in-flight volume ramp when a newer trigger arrives", async () => {
+  const transport = new FakeTransport();
+  (transport as any).failSetGroupMembersOnce = false;
+  transport.playerVolumes.set("RINCON_UPPER_LEVEL", 0);
+  const discovery = new DiscoveryService(transport);
+  const runner = new SceneRunner(discovery, transport, new StructuredLogger("test", "debug"));
+
+  const scene: SceneDefinition = {
+    id: "scene-cancelled-ramp",
+    name: "Cancelled Ramp",
+    householdId: "local-household",
+    coordinatorPlayerId: "RINCON_UPPER_LEVEL",
+    memberPlayerIds: [],
+    coordinatorVolume: 30,
+    playerVolumes: [],
+    volumeRampMs: 60000,
+    offBehavior: {
+      kind: "stop",
+    },
+    settleMs: 0,
+    retryCount: 0,
+    retryDelayMs: 0,
+    autoResetMs: 0,
+  };
+
+  const firstRampWrite = new Promise<void>((resolve) => {
+    transport.onCall = (call) => {
+      if (call.startsWith("setPlayerVolume:")) {
+        transport.onCall = undefined;
+        resolve();
+      }
+    };
+  });
+
+  const onPromise = runner.runOn(scene);
+  await firstRampWrite;
+  const offPromise = runner.runOff(scene);
+
+  const onResult = await onPromise;
+  const offResult = await offPromise;
+
+  assert.equal(onResult.ok, true);
+  assert.equal(offResult.ok, true);
+  const rampWrites = transport.calls.filter((call) => call.startsWith("setPlayerVolume:"));
+  assert.ok(rampWrites.length <= 3, `expected the ramp to stop early, saw ${rampWrites.length} volume writes`);
+  assert.ok((transport.playerVolumes.get("RINCON_UPPER_LEVEL") ?? 0) < 30);
+  assert.ok(onResult.logs.some((entry) => entry.message.includes("Volume ramp cancelled")));
+  assert.ok(transport.calls.includes("stopPlayback:RINCON_UPPER_LEVEL"));
+});
+
+test("SceneRunner skips fades for queued runs that are already superseded", async () => {
+  const transport = new FakeTransport();
+  (transport as any).failSetGroupMembersOnce = false;
+  transport.playerVolumes.set("RINCON_UPPER_LEVEL", 0);
+  const discovery = new DiscoveryService(transport);
+  const runner = new SceneRunner(discovery, transport, new StructuredLogger("test", "debug"));
+
+  const scene: SceneDefinition = {
+    id: "scene-superseded-ramp",
+    name: "Superseded Ramp",
+    householdId: "local-household",
+    coordinatorPlayerId: "RINCON_UPPER_LEVEL",
+    memberPlayerIds: [],
+    coordinatorVolume: 30,
+    playerVolumes: [],
+    volumeRampMs: 60000,
+    offBehavior: {
+      kind: "stop",
+    },
+    settleMs: 0,
+    retryCount: 0,
+    retryDelayMs: 0,
+    autoResetMs: 0,
+  };
+
+  const firstRampWrite = new Promise<void>((resolve) => {
+    transport.onCall = (call) => {
+      if (call.startsWith("setPlayerVolume:")) {
+        transport.onCall = undefined;
+        resolve();
+      }
+    };
+  });
+
+  const firstOn = runner.runOn(scene);
+  await firstRampWrite;
+  // The middle run is superseded before it starts, so it should not fade slowly.
+  const secondOn = runner.runOn(scene);
+  const finalOff = runner.runOff(scene);
+
+  const [firstResult, secondResult, offResult] = await Promise.all([firstOn, secondOn, finalOff]);
+
+  assert.equal(firstResult.ok, true);
+  assert.equal(secondResult.ok, true);
+  assert.equal(offResult.ok, true);
+  assert.ok(secondResult.logs.some((entry) => entry.message.includes("Volume ramp cancelled")));
+  const rampWrites = transport.calls.filter((call) => call.startsWith("setPlayerVolume:"));
+  assert.ok(rampWrites.length <= 4, `expected both ramps to stop early, saw ${rampWrites.length} volume writes`);
 });
 
 test("SceneRunner surfaces partial failure when one parallel room volume write fails", async () => {

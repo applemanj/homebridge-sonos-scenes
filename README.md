@@ -50,6 +50,7 @@ Typical examples:
 - Scene test runs before saving
 - Per-room volume overrides
 - Optional scene volume fade time for configured room volumes
+- Fades cancel cleanly when a newer scene action arrives, so turning a scene off never waits behind a long fade
 - Virtual rooms for Sonos Amp left and right split-room installs
 - Per-channel on/off plus virtual room volume control
 - Virtual room create, edit, and validation flows in the Homebridge UI
@@ -74,7 +75,7 @@ This roadmap is meant to show the direction of the project, not lock every featu
 
 - **TV Source General Availability**: move local TV input scenes out of the advanced/experimental toggle after broader validation across TV-capable Sonos devices and common home-theater setups.
 - **Scene State Reconciliation**: expand the v0.1.31 group-membership reconciliation into a stronger live-state system, including source and playback-state awareness where Sonos reports those states reliably.
-- **Volume Ramping / Fade-In-Fade-Out**: initial per-scene volume fade time is available for configured room volumes; continue tuning cancellation, long fades, and real-world Sonos pacing.
+- **Volume Ramping / Fade-In-Fade-Out**: per-scene volume fade time is available and fades now cancel when a newer scene action arrives; continue tuning long fades and real-world Sonos pacing.
 - **Scene Off = Restore Previous State**: add off behaviors beyond ungrouping, such as pause, stop, restore the prior group topology, or return rooms to a default idle state.
 - **Crossfade, Sleep Timer, and EQ Per Scene**: add optional per-scene playback settings such as crossfade, sleep timer minutes, bass, treble, and loudness, with safeguards so scenes do not leave speakers in surprising states.
 

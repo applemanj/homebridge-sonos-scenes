@@ -11,16 +11,28 @@ import type {
   TopologySnapshot,
 } from "./types";
 
-function sleep(ms: number): Promise<void> {
-  if (ms <= 0) {
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0 || signal?.aborted) {
     return Promise.resolve();
   }
 
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => {
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 const VOLUME_RAMP_STEP_MS = 500;
 const MAX_VOLUME_RAMP_STEPS = 30;
+
+type VolumeRampOutcome = "completed" | "cancelled";
 
 interface PreviousPlayerAudioState {
   playerId: string;
@@ -42,6 +54,9 @@ interface PreviousSceneState {
 export class SceneRunner {
   private queues = new Map<string, Promise<SceneRunResult>>();
   private previousSceneStates = new Map<string, PreviousSceneState>();
+  private latestRunIds = new Map<string, number>();
+  private activeRampAborts = new Map<string, AbortController>();
+  private runSequence = 0;
 
   constructor(
     private readonly discoveryService: DiscoveryService,
@@ -63,6 +78,10 @@ export class SceneRunner {
 
   private enqueue(scene: SceneDefinition, trigger: SceneTrigger): Promise<SceneRunResult> {
     const queueKey = `${scene.householdId}:${scene.coordinatorPlayerId || scene.id}`;
+    const runId = ++this.runSequence;
+    this.latestRunIds.set(queueKey, runId);
+    this.activeRampAborts.get(queueKey)?.abort();
+
     const previous = this.queues.get(queueKey) ?? Promise.resolve({
       ok: true,
       sceneId: scene.id,
@@ -73,10 +92,13 @@ export class SceneRunner {
 
     const next = previous
       .catch(() => undefined)
-      .then(() => this.execute(scene, trigger))
+      .then(() => this.execute(scene, trigger, queueKey, runId))
       .finally(() => {
         if (this.queues.get(queueKey) === next) {
           this.queues.delete(queueKey);
+        }
+        if (this.latestRunIds.get(queueKey) === runId) {
+          this.latestRunIds.delete(queueKey);
         }
       });
 
@@ -84,7 +106,12 @@ export class SceneRunner {
     return next;
   }
 
-  private async execute(scene: SceneDefinition, trigger: SceneTrigger): Promise<SceneRunResult> {
+  private async execute(
+    scene: SceneDefinition,
+    trigger: SceneTrigger,
+    queueKey: string,
+    runId: number,
+  ): Promise<SceneRunResult> {
     const collector = new MemoryLogCollector();
     const logger = this.logger.child(scene.id);
     const scopedLogger = new StructuredLogger(`scene:${scene.id}`, "debug", undefined, collector);
@@ -94,6 +121,13 @@ export class SceneRunner {
       scopedLogger[level](message);
       logger[level](message);
     };
+
+    const rampAbort = new AbortController();
+    if (this.latestRunIds.get(queueKey) !== runId) {
+      // A newer trigger is already queued behind this run; skip slow fades so it starts sooner.
+      rampAbort.abort();
+    }
+    this.activeRampAborts.set(queueKey, rampAbort);
 
     log("info", `Running scene "${scene.name}" (${trigger}).`);
 
@@ -120,7 +154,7 @@ export class SceneRunner {
         await this.capturePreviousSceneState(scene, snapshot, log);
       }
 
-      await this.executeOn(scene, log);
+      await this.executeOn(scene, log, rampAbort.signal);
       log("info", `Scene "${scene.name}" complete.`);
       return this.result(true, scene.id, trigger, collector.entries, errors, snapshot);
     } catch (error) {
@@ -128,6 +162,10 @@ export class SceneRunner {
       errors.push(message);
       log("error", message);
       return this.result(false, scene.id, trigger, collector.entries, errors);
+    } finally {
+      if (this.activeRampAborts.get(queueKey) === rampAbort) {
+        this.activeRampAborts.delete(queueKey);
+      }
     }
   }
 
@@ -152,6 +190,7 @@ export class SceneRunner {
   private async executeOn(
     scene: SceneDefinition,
     log: (level: "debug" | "info" | "warn" | "error", message: string) => void,
+    rampSignal: AbortSignal,
   ): Promise<void> {
     log("info", `Resolved coordinator: ${scene.coordinatorPlayerId}`);
     await this.withRetry(scene, "group members", () =>
@@ -225,9 +264,13 @@ export class SceneRunner {
         const label = playerId === scene.coordinatorPlayerId && scene.coordinatorVolume !== undefined
           ? `set coordinator volume ${volume}`
           : `set room volume ${playerId}=${volume}`;
-        await this.withRetry(scene, label, () => this.applyPlayerVolume(scene, playerId, volume));
+        const rampOutcome = await this.withRetry(scene, label, () =>
+          this.applyPlayerVolume(scene, playerId, volume, rampSignal),
+        );
         const rampMs = scene.volumeRampMs ?? 0;
-        if (playerId === scene.coordinatorPlayerId && scene.coordinatorVolume !== undefined) {
+        if (rampOutcome === "cancelled") {
+          log("info", `Volume ramp cancelled for ${playerId} because a newer scene action arrived; leaving volume at the last ramp step.`);
+        } else if (playerId === scene.coordinatorPlayerId && scene.coordinatorVolume !== undefined) {
           log("info", rampMs > 0
             ? `Ramped coordinator volume and unmuted over ${rampMs}ms: ${playerId}=${volume}`
             : `Set coordinator volume and unmuted: ${playerId}=${volume}`);
@@ -240,36 +283,53 @@ export class SceneRunner {
     );
   }
 
-  private async applyPlayerVolume(scene: SceneDefinition, playerId: string, targetVolume: number): Promise<void> {
+  private async applyPlayerVolume(
+    scene: SceneDefinition,
+    playerId: string,
+    targetVolume: number,
+    rampSignal: AbortSignal,
+  ): Promise<VolumeRampOutcome> {
     const rampMs = scene.volumeRampMs ?? 0;
     if (rampMs <= 0) {
       await this.transport.setPlayerVolume(scene.householdId, playerId, targetVolume);
       await this.transport.setPlayerMuted(scene.householdId, playerId, false);
-      return;
+      return "completed";
+    }
+
+    if (rampSignal.aborted) {
+      await this.transport.setPlayerMuted(scene.householdId, playerId, false);
+      return "cancelled";
     }
 
     const currentVolume = await this.transport.getPlayerVolume(scene.householdId, playerId);
     const steps = this.volumeRampSteps(currentVolume, targetVolume, rampMs);
     if (steps.length === 0) {
       await this.transport.setPlayerMuted(scene.householdId, playerId, false);
-      return;
+      return "completed";
     }
 
     if (currentVolume <= targetVolume) {
       await this.transport.setPlayerMuted(scene.householdId, playerId, false);
     }
 
+    let cancelled = false;
     const delayMs = Math.floor(rampMs / steps.length);
     for (const [index, volume] of steps.entries()) {
+      if (rampSignal.aborted) {
+        cancelled = true;
+        break;
+      }
       await this.transport.setPlayerVolume(scene.householdId, playerId, volume);
       if (index < steps.length - 1) {
-        await sleep(delayMs);
+        await sleep(delayMs, rampSignal);
       }
     }
 
     if (currentVolume > targetVolume) {
       await this.transport.setPlayerMuted(scene.householdId, playerId, false);
     }
+
+    return cancelled ? "cancelled" : "completed";
   }
 
   private volumeRampSteps(currentVolume: number, targetVolume: number, rampMs: number): number[] {
@@ -451,13 +511,12 @@ export class SceneRunner {
     return matched;
   }
 
-  private async withRetry(scene: SceneDefinition, label: string, action: () => Promise<void>): Promise<void> {
+  private async withRetry<T = void>(scene: SceneDefinition, label: string, action: () => Promise<T>): Promise<T> {
     let lastError: unknown;
 
     for (let attempt = 0; attempt <= scene.retryCount; attempt++) {
       try {
-        await action();
-        return;
+        return await action();
       } catch (error) {
         lastError = error;
         if (attempt >= scene.retryCount) {
