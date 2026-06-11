@@ -84,7 +84,7 @@ This repo uses GitHub Actions trusted publishing to publish to npm from a GitHub
 - `TV` support is still transport-gated and conservative
 - `local_plus_cloud` is not yet wired into runtime playback
 - subscription-driven live refresh is not fully implemented yet
-- `npm audit` currently reports a high-severity advisory in the transitive `ip` dependency pulled in by `sonos`
+- `npm audit` reports a high-severity advisory ([GHSA-2p57-rm9w-gvfp](https://github.com/advisories/GHSA-2p57-rm9w-gvfp)) in the transitive `ip` dependency pulled in by `sonos`. No patched `ip` release exists. The flagged code is only reachable through the `sonos` package's UPnP event listener, which this plugin does not start, so the advisory is not exploitable through this plugin today. The longer-term fix under evaluation is moving the local transport to a maintained Sonos library that does not depend on `ip`.
 
 ## References
 
