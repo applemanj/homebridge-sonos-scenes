@@ -138,6 +138,75 @@ test("LocalSonosTransport tracks fixture source URI for line-in scenes", async (
   assert.equal(group?.currentSourceUri, "x-rincon-stream:RINCON_UPPER_LEVEL");
 });
 
+test("LocalSonosTransport routes line-in favorites through the direct line-in path in live mode", async () => {
+  const householdId = "local-household";
+  const coordinatorPlayerId = "RINCON_PRIMARY_BEDROOM";
+  const calls: Array<{ uri: string; metadata: string }> = [];
+  const transport = new LocalSonosTransport({
+    kind: "local",
+    enableLiveDiscovery: false,
+    discoveryTimeoutMs: 2500,
+    requestTimeoutMs: 5000,
+    allowTvSource: false,
+  }, new StructuredLogger("test", "debug", undefined, new MemoryLogCollector()));
+
+  const fakeDevice = {
+    AVTransportService: {
+      SetAVTransportURI: async ({ CurrentURI, CurrentURIMetaData }: { CurrentURI: string; CurrentURIMetaData: string }) => {
+        calls.push({ uri: CurrentURI, metadata: CurrentURIMetaData });
+      },
+      Play: async () => undefined,
+    },
+  };
+
+  (transport as unknown as {
+    livePlayers: Map<string, unknown>;
+    householdRoots: Map<string, unknown>;
+    discoverTopology: () => Promise<unknown>;
+  }).livePlayers = new Map([
+    [coordinatorPlayerId, { device: fakeDevice, host: "127.0.0.1", port: 1400, householdId }],
+    ["RINCON_UPPER_LEVEL", { device: fakeDevice, host: "127.0.0.2", port: 1400, householdId }],
+  ]);
+
+  (transport as unknown as {
+    householdRoots: Map<string, unknown>;
+  }).householdRoots = new Map([
+    [
+      householdId,
+      {
+        ContentDirectoryService: {
+          Browse: async () => ({ Result: rawFavoriteBrowseXml }),
+        },
+      },
+    ],
+  ]);
+
+  (transport as unknown as {
+    discoverTopology: () => Promise<unknown>;
+  }).discoverTopology = async () => ({
+    capturedAt: new Date().toISOString(),
+    origin: "live",
+    households: [
+      {
+        id: householdId,
+        displayName: "Sonos Household",
+        players: [],
+        groups: [],
+        favorites: [],
+      },
+    ],
+  });
+
+  await transport.loadFavorite(householdId, coordinatorPlayerId, "2/11");
+
+  assert.deepEqual(calls, [
+    {
+      uri: "x-rincon-stream:RINCON_347E5C07C5F901400",
+      metadata: "",
+    },
+  ]);
+});
+
 test("LocalSonosTransport reads live channel state from rendering control instead of master values", async () => {
   const householdId = "local-household";
   const playerId = "RINCON_UPPER_LEVEL";

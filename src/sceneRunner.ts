@@ -325,9 +325,7 @@ export class SceneRunner {
       }
     }
 
-    if (currentVolume > targetVolume) {
-      await this.transport.setPlayerMuted(scene.householdId, playerId, false);
-    }
+    await this.transport.setPlayerMuted(scene.householdId, playerId, false);
 
     return cancelled ? "cancelled" : "completed";
   }

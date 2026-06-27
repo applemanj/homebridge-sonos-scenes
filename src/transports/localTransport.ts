@@ -117,6 +117,12 @@ export function buildFavoriteTransportUri(favorite: Pick<SonosFavorite, "uri" | 
   return buildFavoriteContainerUri(favorite.metadata);
 }
 
+function lineInDeviceIdFromTransportUri(transportUri: string): string | undefined {
+  const normalizedUri = transportUri.trim();
+  const match = /^x-rincon-stream:(RINCON_[^?\s]+)/i.exec(normalizedUri);
+  return match?.[1];
+}
+
 function favoriteUnsupportedReason(
   favorite: Pick<SonosFavorite, "uri" | "metadata" | "playbackType" | "description">,
 ): string | undefined {
@@ -508,6 +514,15 @@ export class LocalSonosTransport implements SonosTransport {
     if (!transportUri) {
       throw new Error(`Favorite "${favorite.name}" does not expose enough metadata to build a playable local URI.`);
     }
+    const lineInDeviceId = lineInDeviceIdFromTransportUri(transportUri);
+    if (lineInDeviceId) {
+      this.logger?.info(
+        `Routing Sonos line-in favorite through direct line-in load: household=${householdId}, coordinator=${this.playerLogLabel(coordinatorPlayerId)}, favorite="${favorite.name}" (${favoriteId}), sourceDevice=${lineInDeviceId}.`,
+      );
+      await this.loadLineIn(householdId, coordinatorPlayerId, lineInDeviceId, true);
+      return;
+    }
+
     this.logger?.info(
       `Sending Sonos favorite load request: household=${householdId}, coordinator=${this.playerLogLabel(coordinatorPlayerId)}, favorite="${favorite.name}" (${favoriteId}), transportUri=${transportUri}.`,
     );

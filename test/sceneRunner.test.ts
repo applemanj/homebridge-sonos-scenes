@@ -392,8 +392,48 @@ test("SceneRunner ramps configured volume overrides when a ramp duration is set"
     "setPlayerMuted:RINCON_UPPER_LEVEL:false",
     "setPlayerVolume:RINCON_UPPER_LEVEL:12",
     "setPlayerVolume:RINCON_UPPER_LEVEL:14",
+    "setPlayerMuted:RINCON_UPPER_LEVEL:false",
   ]);
   assert.equal(transport.playerVolumes.get("RINCON_UPPER_LEVEL"), 14);
+});
+
+test("SceneRunner reasserts unmute after ramping a muted room down to its scene volume", async () => {
+  const transport = new FakeTransport();
+  (transport as any).failSetGroupMembersOnce = false;
+  transport.playerVolumes.set("RINCON_UPPER_LEVEL", 40);
+  transport.playerMutes.set("RINCON_UPPER_LEVEL", true);
+  const discovery = new DiscoveryService(transport);
+  const runner = new SceneRunner(discovery, transport, new StructuredLogger("test", "debug"));
+
+  const scene: SceneDefinition = {
+    id: "scene-ramped-muted-volume",
+    name: "Ramped Muted Volume",
+    householdId: "local-household",
+    coordinatorPlayerId: "RINCON_UPPER_LEVEL",
+    memberPlayerIds: [],
+    coordinatorVolume: 20,
+    playerVolumes: [],
+    volumeRampMs: 2,
+    offBehavior: {
+      kind: "none",
+    },
+    settleMs: 0,
+    retryCount: 0,
+    retryDelayMs: 0,
+    autoResetMs: 0,
+  };
+
+  const result = await runner.runOn(scene);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(transport.calls, [
+    "setGroupMembers:RINCON_UPPER_LEVEL:",
+    "setPlayerVolume:RINCON_UPPER_LEVEL:30",
+    "setPlayerVolume:RINCON_UPPER_LEVEL:20",
+    "setPlayerMuted:RINCON_UPPER_LEVEL:false",
+  ]);
+  assert.equal(transport.playerVolumes.get("RINCON_UPPER_LEVEL"), 20);
+  assert.equal(transport.playerMutes.get("RINCON_UPPER_LEVEL"), false);
 });
 
 test("SceneRunner cancels an in-flight volume ramp when a newer trigger arrives", async () => {
