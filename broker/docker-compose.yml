@@ -1,0 +1,15 @@
+services:
+  broker:
+    build: .
+    ports:
+      - "8787:8787"
+    environment:
+      SONOS_CLIENT_ID: ${SONOS_CLIENT_ID}
+      SONOS_CLIENT_SECRET: ${SONOS_CLIENT_SECRET}
+      SONOS_REDIRECT_URI: ${SONOS_REDIRECT_URI}
+      BROKER_API_KEY: ${BROKER_API_KEY}
+      BROKER_TOKEN_SECRET: ${BROKER_TOKEN_SECRET}
+    volumes:
+      - broker-data:/app/data
+volumes:
+  broker-data:

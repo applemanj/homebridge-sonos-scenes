@@ -1,5 +1,7 @@
 # Self-Hosted Cloud Broker Contract
 
+> **Status: Planned for v0.3.x — Docker container.** The broker will ship as a standalone Docker image that users run alongside Homebridge. The container owns Sonos OAuth and token lifecycle; the plugin only talks to the broker over HTTP with a shared API key. Users who don't need cloud sources never install it.
+
 This project is intentionally local-first. For some Sonos favorites and playlists, the local UPnP path is not reliable enough, so the long-term plan is an optional self-hosted broker that uses Sonos's official cloud APIs on the user's behalf.
 
 This document defines the shape of that future broker so the Homebridge plugin can support a `local_plus_cloud` mode without forcing the maintainer to host user tokens.

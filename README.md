@@ -61,7 +61,7 @@ Typical examples:
 - Some complex Sonos favorites do not work reliably over the local-only path
 - `TV` remains an experimental local option; enable `Show TV input sources` before testing it
 - Previous-state restore does not yet restore the exact prior music source
-- `Local + Cloud` is reserved for future self-hosted broker support and is not wired into playback yet
+- `Local + Cloud` broker support is planned as a self-hosted Docker container and is not wired into playback yet
 - Virtual rooms on the same Amp still share one Sonos playback source
 - External master-volume changes can still affect the perceived loudness of both virtual rooms
 
@@ -81,7 +81,7 @@ This roadmap is meant to show the direction of the project, not lock every featu
 
 ### Mid-Term Expansion (v0.3.x): Cloud Broker & Smarter Workflows
 
-- **Complete the Self-Hosted Cloud Broker**: finish OAuth, token refresh, and cloud-backed favorites or playlist loading through the `/broker` scaffold, with a focus on sources that local control cannot play reliably.
+- **Self-Hosted Cloud Broker (Docker)**: ship the `/broker` scaffold as a Docker container that users run alongside Homebridge. The container handles Sonos OAuth and token lifecycle internally — the plugin never stores credentials. Users who want cloud-backed favorites and playlists (Spotify, Apple Music, etc.) deploy the container, run through a one-time Sonos login, and point the plugin at the local broker URL. Users who don't need cloud sources never install it.
 - **Scene Chaining / Sequences**: allow one scene to trigger another after a delay. For example, "Dinner Party" could start with jazz at conversation volume, then switch to a louder "Party" scene later.
 - **Conditional Logic / Smart Scenes**: add lightweight rules such as quiet volumes after 10 PM, skipping a room that is already playing, or avoiding music scenes while TV audio is active.
 - **Portable Speaker Awareness**: detect portable-speaker availability and battery status where possible, so scenes can skip Move or Roam speakers that are offline, Bluetooth-connected, or low on battery.

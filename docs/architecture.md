@@ -34,7 +34,7 @@ Today that covers:
 - supported local favorites
 - per-player and group volume
 
-The project also reserves a future `local_plus_cloud` mode for self-hosters who want to run their own Sonos cloud broker. That contract is documented in [cloud-broker.md](cloud-broker.md).
+The project also reserves a future `local_plus_cloud` mode for self-hosters who want to run their own Sonos cloud broker as a Docker container alongside Homebridge. The container owns Sonos OAuth and token lifecycle; the plugin only talks to the broker over HTTP. The contract is documented in [cloud-broker.md](cloud-broker.md).
 
 ## Repository Layout
 

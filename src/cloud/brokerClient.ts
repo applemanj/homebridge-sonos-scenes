@@ -1,4 +1,4 @@
-import type { CloudBrokerConfig } from "../types";
+﻿import type { CloudBrokerConfig } from "../types";
 
 export type CloudBrokerFeature = "favorites" | "playlists";
 
@@ -10,7 +10,34 @@ export interface CloudBrokerStatus {
   docsUrl?: string;
   mode?: "scaffold" | "live";
   oauthConfigured?: boolean;
+  authenticated?: boolean;
   message?: string;
+}
+
+export interface CloudBrokerHousehold {
+  id: string;
+  displayName?: string;
+}
+
+export interface CloudBrokerGroup {
+  id: string;
+  name?: string;
+  coordinatorId?: string;
+  playerIds?: string[];
+}
+
+export interface CloudBrokerFavorite {
+  id: string;
+  name?: string;
+  description?: string;
+  imageUrl?: string;
+}
+
+export interface CloudBrokerPlaylist {
+  id: string;
+  name?: string;
+  description?: string;
+  imageUrl?: string;
 }
 
 function trimTrailingSlash(value: string): string {
@@ -38,6 +65,58 @@ export class CloudBrokerClient {
     });
   }
 
+  async getHouseholds(): Promise<CloudBrokerHousehold[]> {
+    const response = await this.request<{ households?: CloudBrokerHousehold[] } | CloudBrokerHousehold[]>(
+      "/v1/households",
+      { method: "GET" },
+    );
+    return Array.isArray(response) ? response : (response.households ?? []);
+  }
+
+  async getGroups(householdId: string): Promise<CloudBrokerGroup[]> {
+    const response = await this.request<{ groups?: CloudBrokerGroup[] } | CloudBrokerGroup[]>(
+      "/v1/households/" + encodeURIComponent(householdId) + "/groups",
+      { method: "GET" },
+    );
+    return Array.isArray(response) ? response : (response.groups ?? []);
+  }
+
+  async getFavorites(householdId: string): Promise<CloudBrokerFavorite[]> {
+    const response = await this.request<{ favorites?: CloudBrokerFavorite[] } | CloudBrokerFavorite[]>(
+      "/v1/households/" + encodeURIComponent(householdId) + "/favorites",
+      { method: "GET" },
+    );
+    return Array.isArray(response) ? response : (response.favorites ?? []);
+  }
+
+  async getPlaylists(householdId: string): Promise<CloudBrokerPlaylist[]> {
+    const response = await this.request<{ playlists?: CloudBrokerPlaylist[] } | CloudBrokerPlaylist[]>(
+      "/v1/households/" + encodeURIComponent(householdId) + "/playlists",
+      { method: "GET" },
+    );
+    return Array.isArray(response) ? response : (response.playlists ?? []);
+  }
+
+  async loadFavorite(groupId: string, favoriteId: string, action?: string): Promise<void> {
+    await this.request("/v1/groups/" + encodeURIComponent(groupId) + "/favorites/load", {
+      method: "POST",
+      body: JSON.stringify({
+        favoriteId,
+        action: action || "PLAY_NOW",
+      }),
+    });
+  }
+
+  async loadPlaylist(groupId: string, playlistId: string, action?: string): Promise<void> {
+    await this.request("/v1/groups/" + encodeURIComponent(groupId) + "/playlists/load", {
+      method: "POST",
+      body: JSON.stringify({
+        playlistId,
+        action: action || "PLAY_NOW",
+      }),
+    });
+  }
+
   private async request<T>(path: string, init: RequestInit): Promise<T> {
     if (!this.baseUrl) {
       throw new Error("No cloud broker URL is configured.");
@@ -47,22 +126,36 @@ export class CloudBrokerClient {
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
 
     try {
-      const response = await fetch(`${this.baseUrl}${path}`, {
+      let authHeader: string | undefined;
+      if (this.config.apiKey) {
+        authHeader = "Bearer " + this.config.apiKey;
+      }
+
+      const response = await fetch(this.baseUrl + path, {
         ...init,
         headers: {
           Accept: "application/json",
-          ...(this.config.apiKey
-            ? {
-                Authorization: `Bearer ${this.config.apiKey}`,
-              }
-            : {}),
+          ...(init.body ? { "Content-Type": "application/json" } : {}),
+          ...(authHeader ? { Authorization: authHeader } : {}),
           ...init.headers,
         },
         signal: controller.signal,
       });
 
       if (!response.ok) {
-        throw new Error(`Cloud broker request failed: ${response.status} ${response.statusText}`);
+        const errorBody = await response.text().catch(() => "");
+        let message: string;
+        try {
+          const parsed = JSON.parse(errorBody);
+          message = parsed.message || parsed.error || response.status + " " + response.statusText;
+        } catch {
+          message = response.status + " " + response.statusText;
+        }
+        throw new Error("Cloud broker request failed: " + message);
+      }
+
+      if (response.status === 204 || response.headers.get("content-length") === "0") {
+        return undefined as T;
       }
 
       return await response.json() as T;
