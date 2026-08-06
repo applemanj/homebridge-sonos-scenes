@@ -59,14 +59,15 @@ export async function exchangeCodeForTokens(code) {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code,
-    client_id: CLIENT_ID,
-    client_secret: CLIENT_SECRET,
     redirect_uri: REDIRECT_URI,
   });
 
   const response = await fetch(OAUTH_TOKEN_URL, {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      authorization: "Basic " + Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64"),
+    },
     body: body.toString(),
   });
 
@@ -94,13 +95,14 @@ export async function refreshAccessToken(userId) {
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: tokens.refreshToken,
-    client_id: CLIENT_ID,
-    client_secret: CLIENT_SECRET,
   });
 
   const response = await fetch(OAUTH_TOKEN_URL, {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      authorization: "Basic " + Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64"),
+    },
     body: body.toString(),
   });
 
