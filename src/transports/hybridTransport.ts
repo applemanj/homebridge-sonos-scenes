@@ -38,6 +38,13 @@ export class HybridSonosTransport implements SonosTransport {
     return this.localTransport.supportsSource(kind) || kind === "favorite";
   }
 
+  canPlayFavorite(): boolean {
+    // The cloud broker can load streaming favorites (Apple Music, Spotify,
+    // etc.) that the local transport cannot. Line-in favorites still fall back
+    // to the local transport at load time, so every favorite is playable here.
+    return true;
+  }
+
   // -- Discovery (always local) --
 
   discoverHouseholds(): Promise<SonosHouseholdSummary[]> {
@@ -104,11 +111,20 @@ export class HybridSonosTransport implements SonosTransport {
         throw new Error(`No group found for coordinator ${coordinatorPlayerId}`);
       }
 
+      // Local discovery reports favorites as "FV:<n>/<id>" (normalized to "<n>/<id>"),
+      // but the Sonos cloud API expects the bare favorite id. Strip any prefix so the
+      // cloud broker receives the id it can resolve (e.g. "2/13" -> "13").
+      const cloudFavoriteId = favoriteId.includes("/")
+        ? favoriteId.slice(favoriteId.lastIndexOf("/") + 1)
+        : favoriteId.includes(":")
+          ? favoriteId.slice(favoriteId.indexOf(":") + 1)
+          : favoriteId;
+
       this.logger?.info(
-        `Loading favorite ${favoriteId} via cloud broker on group ${group.id}`,
+        `Loading favorite ${favoriteId} (cloud id ${cloudFavoriteId}) via cloud broker on group ${group.id}`,
       );
 
-      await this.brokerClient.loadFavorite(group.id, favoriteId);
+      await this.brokerClient.loadFavorite(group.id, cloudFavoriteId);
     } catch (error) {
       this.logger?.warn(
         `Cloud broker favorite load failed, falling back to local: ${error instanceof Error ? error.message : String(error)}`,

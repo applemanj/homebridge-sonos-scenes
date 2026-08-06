@@ -260,6 +260,12 @@ export interface ValidationResult {
 export interface SonosTransport {
   readonly kind: string;
   supportsSource(kind: SceneSourceKind): boolean;
+  /**
+   * Whether the transport can play the given favorite. Optional; when omitted,
+   * validation falls back to the favorite's local `playable` flag. Transports
+   * that can route favorites elsewhere (e.g. a cloud broker) override this.
+   */
+  canPlayFavorite?(favorite: SonosFavorite): boolean;
   discoverHouseholds(): Promise<SonosHouseholdSummary[]>;
   discoverTopology(): Promise<TopologySnapshot>;
   setGroupMembers(

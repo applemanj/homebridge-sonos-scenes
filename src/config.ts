@@ -342,7 +342,14 @@ function validateSource(
       return;
     }
 
-    if (favorite.playable === false) {
+    // In hybrid/cloud mode the transport can route favorites through the cloud
+    // broker even when the local transport cannot play them directly. Defer to
+    // the transport's own capability check when it provides one.
+    const canPlay = transport.canPlayFavorite
+      ? transport.canPlayFavorite(favorite)
+      : favorite.playable !== false;
+
+    if (!canPlay) {
       result.errors.push(
         favorite.unsupportedReason
         ?? `Favorite "${favorite.name}" is not playable through the active local transport. Use Local Only scenes for line-in and directly playable favorites, or add a Sonos cloud broker in a future Local + Cloud setup.`,
