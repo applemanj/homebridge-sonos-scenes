@@ -1,0 +1,41 @@
+name: Deploy Central Broker to Azure
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'broker/**'
+      - '.github/workflows/azure-broker-deploy.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare deployment
+        run: |
+          cd broker
+          zip -r ../deploy.zip src/ package.json .dockerignore
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: sonos-scenes-broker
+          package: deploy.zip
+          slot-name: production
+
+      - name: Verify deployment
+        run: |
+          sleep 5
+          curl -f https://sonos-scenes-broker.azurewebsites.net/healthz || exit 1
+          echo "Deployment successful!"
