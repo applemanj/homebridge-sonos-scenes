@@ -40,6 +40,9 @@ export interface CloudBrokerPlaylist {
   imageUrl?: string;
 }
 
+// Default central broker URL (will be deployed to Azure)
+const CENTRAL_BROKER_URL = "https://sonos-scenes-broker.azurewebsites.net";
+
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/g, "");
 }
@@ -48,6 +51,10 @@ export class CloudBrokerClient {
   constructor(private readonly config: CloudBrokerConfig) {}
 
   get configured(): boolean {
+    if (this.config.kind === "central") {
+      return true; // Central broker is always available
+    }
+    // For self-hosted, URL must be configured
     return typeof this.config.url === "string" && this.config.url.trim().length > 0;
   }
 
@@ -56,7 +63,13 @@ export class CloudBrokerClient {
       return undefined;
     }
 
-    return trimTrailingSlash(this.config.url!.trim());
+    // Use central broker by default, or self-hosted URL if specified
+    const url = this.config.kind === "central" ? CENTRAL_BROKER_URL : this.config.url;
+    if (!url) {
+      return undefined;
+    }
+
+    return trimTrailingSlash(url.trim());
   }
 
   async getStatus(): Promise<CloudBrokerStatus> {

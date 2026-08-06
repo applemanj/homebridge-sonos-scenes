@@ -148,7 +148,10 @@ export interface LocalTransportConfig {
   allowTvSource: boolean;
 }
 
+export type BrokerKind = "central" | "self-hosted";
+
 export interface CloudBrokerConfig {
+  kind?: BrokerKind;
   url?: string;
   apiKey?: string;
   timeoutMs: number;

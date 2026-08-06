@@ -88,16 +88,28 @@
             ]
           },
           "broker": {
-            "title": "Broker",
+            "title": "Broker Settings",
             "type": "object",
             "properties": {
+              "kind": {
+                "title": "Broker Deployment",
+                "type": "string",
+                "default": "central",
+                "description": "Use 'central' for the hosted broker (no setup needed), or 'self-hosted' to connect to your own Docker container",
+                "oneOf": [
+                  "central",
+                  "self-hosted"
+                ]
+              },
               "url": {
                 "title": "Broker URL",
-                "type": "string"
+                "type": "string",
+                "description": "Only needed if using 'self-hosted'. Example: http://192.168.1.11:8787"
               },
               "apiKey": {
                 "title": "Broker API Key",
-                "type": "string"
+                "type": "string",
+                "description": "Only needed if using 'self-hosted'. Match the BROKER_API_KEY in your .env file"
               },
               "timeoutMs": {
                 "title": "Broker Timeout (ms)",

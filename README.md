@@ -59,13 +59,12 @@ Typical examples:
 
 - This is still beta software
 - Some complex Sonos favorites do not work reliably over the local-only path
-- `TV` remains an experimental local option; enable `Show TV input sources` before testing it
+- `TV` remains an experimental local option; enable `Show TV Input Sources` before testing it
 - Previous-state restore does not yet restore the exact prior music source
-- `Local + Cloud` broker support is planned as a self-hosted Docker container and is not wired into playback yet
 - Virtual rooms on the same Amp still share one Sonos playback source
 - External master-volume changes can still affect the perceived loudness of both virtual rooms
 
-For most people, `Local Only` is the right mode today.
+For most people, `Local Only` is the right mode today. When you're ready to try cloud-backed sources (Spotify, Apple Music, etc.), you can enable `Local + Cloud` mode with either the centrally-hosted broker or your own Docker container.
 
 ## Roadmap
 
@@ -81,7 +80,7 @@ This roadmap is meant to show the direction of the project, not lock every featu
 
 ### Mid-Term Expansion (v0.3.x): Cloud Broker & Smarter Workflows
 
-- **Self-Hosted Cloud Broker (Docker)**: ship the `/broker` scaffold as a Docker container that users run alongside Homebridge. The container handles Sonos OAuth and token lifecycle internally — the plugin never stores credentials. Users who want cloud-backed favorites and playlists (Spotify, Apple Music, etc.) deploy the container, run through a one-time Sonos login, and point the plugin at the local broker URL. Users who don't need cloud sources never install it.
+- **Self-Hosted Cloud Broker (Docker)** ✅ Available: The `/broker` directory contains a full Docker-ready broker that handles Sonos OAuth and token lifecycle. Users who want cloud-backed favorites and playlists (Spotify, Apple Music, etc.) can deploy it themselves alongside Homebridge, or use the centrally-hosted broker (no setup required).
 - **Scene Chaining / Sequences**: allow one scene to trigger another after a delay. For example, "Dinner Party" could start with jazz at conversation volume, then switch to a louder "Party" scene later.
 - **Conditional Logic / Smart Scenes**: add lightweight rules such as quiet volumes after 10 PM, skipping a room that is already playing, or avoiding music scenes while TV audio is active.
 - **Portable Speaker Awareness**: detect portable-speaker availability and battery status where possible, so scenes can skip Move or Roam speakers that are offline, Bluetooth-connected, or low on battery.
@@ -154,6 +153,31 @@ If you are new to the plugin, start with:
 
 That gives you the smoothest first test.
 
+## Cloud Broker Setup
+
+When you're ready to use cloud-backed sources like Spotify, Apple Music, or cloud playlists, you'll need a cloud broker. The plugin supports two options:
+
+### Option 1: Centrally-Hosted Broker (Recommended)
+
+The easiest path: no setup required. Just enable `Local + Cloud` mode in the plugin settings and point to the central broker. Your tokens are encrypted and secure.
+
+**In Homebridge UI:**
+1. Open plugin settings
+2. Set `Control Mode` to `Local + Cloud`
+3. Set `Broker Deployment` to `Central`
+4. Save and restart Homebridge
+
+No further configuration needed — the plugin will connect to our managed broker.
+
+### Option 2: Self-Hosted Docker Container
+
+For users who want full control over their data, you can run your own broker alongside Homebridge. See [Self-Hosted Broker Scaffold](broker/README.md) for Docker Compose setup and detailed instructions.
+
+**Prerequisites:**
+- Docker and Docker Compose installed
+- Sonos OAuth credentials registered at https://integration.sonos.com/integrations
+- A publicly routable HTTPS URL for the OAuth redirect (or ngrok/tunnel for local testing)
+
 ## Troubleshooting
 
 If a scene does not work the first time:
@@ -186,5 +210,6 @@ If you want the more technical details, use these docs:
 - [Architecture and Developer Notes](docs/architecture.md)
 - [Virtual Rooms](docs/virtual-rooms.md)
 - [Cloud Broker Contract](docs/cloud-broker.md)
+- [Central Broker Deployment on Azure](docs/central-broker-deployment.md)
 - [Self-Hosted Broker Scaffold](broker/README.md)
 - [Example Config](examples/config.example.json)
