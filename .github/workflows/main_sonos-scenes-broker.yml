@@ -1,36 +1,43 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
+# Deploys the Sonos broker (broker/) to Azure App Service.
+# Uses the publish profile secret for authentication (no separate azure/login needed).
 
-name: 'Build and deploy Node.js app to Azure Web App: sonos-scenes-broker'
+name: Deploy Broker to Azure Web App
 
 on:
   push:
     branches:
-    - main
+      - main
+    paths:
+      - 'broker/**'
+      - '.github/workflows/main_sonos-scenes-broker.yml'
   workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-    - name: Set up Node.js version
-      uses: actions/setup-node@v1
-      with:
-        node-version: '22.x'
-    
-    - name: npm install, build, and test
-      run: |
-        npm install
-        npm run build --if-present
-        npm run test --if-present
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
 
-    - name: 'Deploy to Azure Web App'
-      uses: azure/webapps-deploy@v2
-      with: 
-        app-name: 'sonos-scenes-broker'
-        slot-name: 'production'
-        publish-profile: ${{ secrets.AzureAppService_PublishProfile_80bdb00833cb4520be847930dd9557f2 }}
-        package: .
+      - name: Package broker
+        run: |
+          cd broker
+          zip -r ../broker-deploy.zip src package.json
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'sonos-scenes-broker'
+          slot-name: 'production'
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_80BDB00833CB4520BE847930DD9557F2 }}
+          package: broker-deploy.zip
+
+      - name: Verify deployment
+        run: |
+          sleep 10
+          curl -f https://sonos-scenes-broker.azurewebsites.net/healthz

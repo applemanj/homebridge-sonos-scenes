@@ -95,7 +95,7 @@
                 "title": "Broker Deployment",
                 "type": "string",
                 "default": "central",
-                "description": "Use 'central' for the hosted broker (no setup needed), or 'self-hosted' to connect to your own Docker container",
+                "description": "Use 'central' for the hosted broker, or 'self-hosted' to connect to your own Docker container",
                 "oneOf": [
                   "central",
                   "self-hosted"
@@ -109,7 +109,7 @@
               "apiKey": {
                 "title": "Broker API Key",
                 "type": "string",
-                "description": "Only needed if using 'self-hosted'. Match the BROKER_API_KEY in your .env file"
+                "description": "Your personal broker key (starts with 'ssk_'). Get one by opening the broker URL in a browser and signing in with Sonos. Keep it secret."
               },
               "timeoutMs": {
                 "title": "Broker Timeout (ms)",

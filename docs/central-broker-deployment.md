@@ -63,10 +63,11 @@ az webapp config appsettings set \
     SONOS_REDIRECT_URI="https://${APP_NAME}.azurewebsites.net/auth/callback" \
     BROKER_PORT=8080 \
     BROKER_HOST=0.0.0.0 \
-    BROKER_API_KEY="generate-a-random-api-key-here" \
-    BROKER_TOKEN_SECRET="" \
+    BROKER_TOKEN_SECRET="generate-a-long-random-secret" \
     BROKER_DOCS_URL="https://github.com/applemanj/homebridge-sonos-scenes/blob/main/docs/cloud-broker.md"
 ```
+
+> **No `BROKER_API_KEY`.** The broker uses per-user API keys minted after each user signs in with Sonos at `/auth/login`. Set a strong `BROKER_TOKEN_SECRET` so user tokens stay decryptable across restarts/redeploys.
 
 ### 3. Deploy Code
 
@@ -125,7 +126,7 @@ curl https://${APP_NAME}.azurewebsites.net/v1/status
    - `SONOS_CLIENT_ID`
    - `SONOS_CLIENT_SECRET`
    - `SONOS_REDIRECT_URI`: `https://sonos-scenes-broker.azurewebsites.net/auth/callback`
-   - `BROKER_API_KEY`: Generate a strong random key
+   - `BROKER_TOKEN_SECRET`: Generate a strong random secret (encrypts user tokens at rest)
 8. Restart the app
 
 ## Scaling and Costs
@@ -188,14 +189,17 @@ az webapp config appsettings list \
 
 ### Plugin can't reach broker
 
-1. Test with curl from your machine:
+1. Test the unauthenticated status endpoint with curl from your machine:
    ```bash
-   curl -H "Authorization: Bearer test-api-key" \
-     https://sonos-scenes-broker.azurewebsites.net/v1/status
+   curl https://sonos-scenes-broker.azurewebsites.net/v1/status
    ```
-2. Verify firewall isn't blocking azurewebsites.net
-3. Check plugin config has correct URL and API key
-
+2. For authenticated endpoints, use your personal key from the OAuth flow:
+   ```bash
+   curl -H "Authorization: Bearer ssk_your-key" \
+     https://sonos-scenes-broker.azurewebsites.net/auth/status
+   ```
+3. Verify firewall isn't blocking azurewebsites.net
+4. Check plugin config has the correct URL and your personal `ssk_...` API key
 ## Updates
 
 When you push changes to `main`, GitHub Actions automatically redeploys to Azure (if CI/CD is configured). Or manually redeploy:

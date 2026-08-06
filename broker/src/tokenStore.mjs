@@ -3,15 +3,15 @@ import { promises as fs } from "node:fs";
 import { join } from "node:path";
 
 const DATA_DIR = process.env.BROKER_DATA_DIR || "./data";
-const TOKEN_SECRET = process.env.BROKER_TOKEN_SECRET?.trim() || null;
-const TOKEN_FILE = join(DATA_DIR, "tokens.json");
+const TOKENS_DIR = join(DATA_DIR, "tokens");
 const KEY_FILE = join(DATA_DIR, ".tokenkey");
+const TOKEN_SECRET = process.env.BROKER_TOKEN_SECRET?.trim() || null;
 
 let cachedKey = null;
 
-async function ensureDataDir() {
+async function ensureDir(dir) {
   try {
-    await fs.mkdir(DATA_DIR, { recursive: true, mode: 0o700 });
+    await fs.mkdir(dir, { recursive: true, mode: 0o700 });
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
@@ -34,15 +34,30 @@ async function getOrCreateKey() {
   }
 
   const newKey = randomBytes(32);
-  await ensureDataDir();
+  await ensureDir(DATA_DIR);
   await fs.writeFile(KEY_FILE, newKey.toString("hex"), { mode: 0o600 });
-  cachedKey = newKey;
   console.log(`[tokenStore] Generated and persisted new encryption key to ${KEY_FILE}`);
-  return cachedKey;
+  return newKey;
 }
 
-export async function saveTokens(tokens) {
-  await ensureDataDir();
+function sanitizeUserId(userId) {
+  if (typeof userId !== "string" || userId.length === 0) {
+    throw new Error("userId is required");
+  }
+  // Prevent path traversal; userIds are hex from keyStore, but be defensive.
+  const safe = userId.replace(/[^a-zA-Z0-9_-]/g, "");
+  if (safe.length === 0) {
+    throw new Error("userId has no usable characters");
+  }
+  return safe;
+}
+
+function tokenFileFor(userId) {
+  return join(TOKENS_DIR, `${sanitizeUserId(userId)}.json`);
+}
+
+export async function saveTokens(userId, tokens) {
+  await ensureDir(TOKENS_DIR);
   const key = await getOrCreateKey();
 
   const iv = randomBytes(12);
@@ -65,20 +80,15 @@ export async function saveTokens(tokens) {
     authTag: authTag.toString("hex"),
   };
 
-  await fs.writeFile(TOKEN_FILE, JSON.stringify(data), { mode: 0o600 });
+  await fs.writeFile(tokenFileFor(userId), JSON.stringify(data), { mode: 0o600 });
 }
 
-export async function getTokens() {
+export async function getTokens(userId) {
   try {
-    const data = JSON.parse(await fs.readFile(TOKEN_FILE, "utf8"));
+    const data = JSON.parse(await fs.readFile(tokenFileFor(userId), "utf8"));
     const key = await getOrCreateKey();
 
-    const decipher = createDecipheriv(
-      "aes-256-gcm",
-      key,
-      Buffer.from(data.iv, "hex")
-    );
-
+    const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(data.iv, "hex"));
     decipher.setAuthTag(Buffer.from(data.authTag, "hex"));
     let decrypted = decipher.update(data.encrypted, "hex", "utf8");
     decrypted += decipher.final("utf8");
@@ -93,27 +103,27 @@ export async function getTokens() {
     if (error.code === "ENOENT") {
       return null;
     }
-    console.error("[tokenStore] failed to decrypt tokens:", error.message);
+    console.error(`[tokenStore] failed to decrypt tokens for user:`, error.message);
     return null;
   }
 }
 
-export async function clearTokens() {
+export async function clearTokens(userId) {
   try {
-    await fs.unlink(TOKEN_FILE);
+    await fs.unlink(tokenFileFor(userId));
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
 }
 
-export async function isExpired() {
-  const tokens = await getTokens();
+export async function isExpired(userId) {
+  const tokens = await getTokens(userId);
   if (!tokens) return true;
   return Date.now() >= new Date(tokens.expiresAt).getTime();
 }
 
-export async function isAuthenticated() {
-  const tokens = await getTokens();
+export async function isAuthenticated(userId) {
+  const tokens = await getTokens(userId);
   if (!tokens) return false;
-  return !await isExpired();
+  return !(await isExpired(userId));
 }

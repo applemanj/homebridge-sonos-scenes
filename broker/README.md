@@ -6,12 +6,13 @@ This is the self-hosted cloud broker for `homebridge-sonos-scenes`, designed to 
 
 The broker bridges Sonos's official cloud APIs so the plugin can use cloud-backed favorites and playlists (Spotify, Apple Music, etc.). It handles:
 
-- **Sonos OAuth flow** — Users log in once via the container's web UI (`/auth/login`). State parameters prevent CSRF attacks.
-- **Secure token storage** — Tokens are encrypted at rest using AES-256-GCM. The encryption key is auto-generated and stored in the data volume.
-- **Automatic token refresh** — When access tokens expire, the broker refreshes them via the Sonos OAuth endpoint.
-- **Cloud API proxying** — The plugin calls the broker's HTTP endpoints (with an API key), and the broker translates them to Sonos API calls with the stored access token.
+- **Sonos OAuth flow** — Each user logs in once via the broker's web UI (`/auth/login`). State parameters prevent CSRF attacks.
+- **Per-user broker API keys** — After OAuth, the broker mints a personal API key (`ssk_...`) shown once to the user. The plugin uses this key; the broker resolves it to that user's stored tokens.
+- **Secure per-user token storage** — Each user's tokens are encrypted at rest using AES-256-GCM, keyed by their userId. The encryption key is auto-generated and stored in the data volume.
+- **Automatic token refresh** — When a user's access token expires, the broker refreshes it via the Sonos OAuth endpoint.
+- **Cloud API proxying** — The plugin calls the broker's HTTP endpoints with its personal API key, and the broker translates them to Sonos API calls with that user's access token.
 
-The plugin talks to the broker over plain HTTP with a shared API key — no Sonos credentials ever touch the plugin or your Homebridge config.
+The plugin talks to the broker over HTTPS with a per-user API key — no Sonos credentials ever touch the plugin or your Homebridge config.
 
 ## Architecture
 
@@ -44,14 +45,14 @@ The plugin talks to the broker over plain HTTP with a shared API key — no Sono
 ### Unauthenticated
 
 - `GET /healthz` — Health check (always responds `200 OK`)
-- `GET /v1/status` — Broker status JSON (OAuth configured, authenticated)
+- `GET /v1/status` — Broker status JSON (OAuth configured)
 - `GET /auth/login` — OAuth login page (HTML UI)
-- `GET /auth/callback` — OAuth callback handler (Sonos redirects here)
-- `GET /auth/status` — Auth status JSON
-- `POST /auth/disconnect` — Clear stored tokens (API key auth required)
+- `GET /auth/callback` — OAuth callback handler (Sonos redirects here; mints + shows a personal API key)
 
-### Authenticated (API key required)
+### Authenticated (personal broker API key required)
 
+- `GET /auth/status` — Auth status JSON for your user
+- `POST /auth/disconnect` — Clear your tokens and revoke your API key
 - `GET /v1/households` — List households
 - `GET /v1/households/:householdId/groups` — List groups in household
 - `GET /v1/households/:householdId/favorites` — List favorites
@@ -74,15 +75,14 @@ SONOS_REDIRECT_URI=https://your-broker.example.com/auth/callback
 BROKER_PORT=8787
 BROKER_HOST=0.0.0.0
 
-# Shared API key for plugin authentication (generate a random string)
-BROKER_API_KEY=
-
 # Secret for encrypting tokens at rest (auto-generated and stored if not set)
 BROKER_TOKEN_SECRET=
 
 # Optional: docs URL shown on login page
 BROKER_DOCS_URL=https://github.com/applemanj/homebridge-sonos-scenes/blob/main/docs/cloud-broker.md
 ```
+
+> **Note:** There is no `BROKER_API_KEY` anymore. Each user gets a personal broker API key (`ssk_...`) after signing in with Sonos at `/auth/login`. The broker stores these keys (hashed) and resolves them to per-user tokens.
 
 ## Quick Start (Docker)
 
@@ -108,12 +108,12 @@ docker-compose up -d
 
 The broker will listen on `http://localhost:8787`.
 
-### 4. Complete OAuth
+### 4. Complete OAuth & Get Your API Key
 
 1. Visit `http://localhost:8787/auth/login` (or your public HTTPS URL)
 2. Click "Sign in with Sonos"
 3. Authorize the app
-4. You're authenticated! The token is encrypted and persisted in the volume.
+4. The broker shows a **personal broker API key** (`ssk_...`) — copy it now; it's only shown once.
 
 ### 5. Point the Plugin
 
@@ -123,9 +123,15 @@ In your Homebridge config, set:
 {
   "platforms": [
     {
-      "platform": "Sonos Scenes",
-      "brokerUrl": "http://localhost:8787",
-      "brokerApiKey": "your-shared-api-key"
+      "platform": "SonosScenes",
+      "cloud": {
+        "mode": "local_plus_cloud",
+        "broker": {
+          "kind": "self-hosted",
+          "url": "http://localhost:8787",
+          "apiKey": "ssk_your-personal-key"
+        }
+      }
     }
   ]
 }
@@ -169,7 +175,8 @@ BROKER_PORT=8787 BROKER_HOST=127.0.0.1 node src/server.mjs
 
 - `src/server.mjs` — Main HTTP server
 - `src/oauth.mjs` — OAuth flow (login, callback, token refresh)
-- `src/tokenStore.mjs` — Encrypted token storage (AES-256-GCM)
+- `src/keyStore.mjs` — Per-user broker API keys (mint, resolve, revoke; sha256-hashed at rest)
+- `src/tokenStore.mjs` — Per-user encrypted token storage (AES-256-GCM)
 - `src/sonosApi.mjs` — Sonos Cloud API client
 - `Dockerfile` — Alpine-based Docker image
 - `docker-compose.yml` — Example Docker Compose stack
@@ -178,10 +185,11 @@ BROKER_PORT=8787 BROKER_HOST=127.0.0.1 node src/server.mjs
 ## Security Notes
 
 - **Zero external dependencies** — Uses only Node.js built-ins. No npm supply-chain risk.
-- **Encrypted tokens** — Stored in AES-256-GCM with keys derived from `BROKER_TOKEN_SECRET` or auto-generated.
-- **HTTPS required** — The Sonos OAuth flow requires HTTPS. Use a reverse proxy.
-- **API key auth** — All Sonos endpoints require the configured `BROKER_API_KEY` bearer token.
+- **Per-user API keys** — Each user gets a unique `ssk_...` key after OAuth. Keys are stored sha256-hashed; only the user ever sees the plaintext (once, at creation).
+- **Per-user encrypted tokens** — Each user's Sonos tokens are stored separately in AES-256-GCM, keyed by userId.
+- **HTTPS required** — The Sonos OAuth flow requires HTTPS. Use a reverse proxy (or a host like Azure App Service that provides TLS).
+- **Revocable access** — `POST /auth/disconnect` clears a user's tokens and revokes their key.
 - **State parameter validation** — OAuth state tokens are validated and have a 10-minute TTL to prevent CSRF.
 - **Token expiry** — Access tokens are refreshed automatically before they expire.
-- **No secrets in logs** — Token values are never logged.
+- **No secrets in logs** — Token and key values are never logged.
 

@@ -25,56 +25,104 @@ async function cleanup() {
 async function runTests() {
   console.log("🧪 Running broker tests...\n");
 
-  // Test 1: Token Store
-  console.log("Test 1: Token Store (Encryption)");
+  // Test 1: Per-user Token Store
+  console.log("Test 1: Token Store (per-user, encrypted)");
   try {
     await mkdir(dataDir, { recursive: true });
 
     const tokenStore = await import("./src/tokenStore.mjs");
 
-    const testTokens = {
-      accessToken: "test-access-token-12345",
-      refreshToken: "test-refresh-token-67890",
+    const userA = "user-a-123";
+    const userB = "user-b-456";
+
+    const tokensA = {
+      accessToken: "access-A",
+      refreshToken: "refresh-A",
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+    };
+    const tokensB = {
+      accessToken: "access-B",
+      refreshToken: "refresh-B",
       expiresAt: new Date(Date.now() + 3600000).toISOString(),
     };
 
-    await tokenStore.saveTokens(testTokens);
-    console.log("  ✓ Tokens saved and encrypted");
+    await tokenStore.saveTokens(userA, tokensA);
+    await tokenStore.saveTokens(userB, tokensB);
+    console.log("  ✓ Tokens saved for two users");
 
-    const retrieved = await tokenStore.getTokens();
-    if (
-      retrieved.accessToken !== testTokens.accessToken ||
-      retrieved.refreshToken !== testTokens.refreshToken
-    ) {
-      throw new Error("Retrieved tokens do not match");
+    const gotA = await tokenStore.getTokens(userA);
+    const gotB = await tokenStore.getTokens(userB);
+    if (gotA.accessToken !== "access-A" || gotB.accessToken !== "access-B") {
+      throw new Error("Tokens not isolated per user");
     }
-    console.log("  ✓ Tokens decrypted correctly");
+    console.log("  ✓ Tokens are isolated per user");
 
-    const isExpired = await tokenStore.isExpired();
-    if (isExpired) {
+    if (await tokenStore.isExpired(userA)) {
       throw new Error("Tokens should not be expired");
     }
-    console.log("  ✓ Token expiry check works");
-
-    const authenticated = await tokenStore.isAuthenticated();
-    if (!authenticated) {
-      throw new Error("Should be authenticated");
+    if (!(await tokenStore.isAuthenticated(userA))) {
+      throw new Error("User A should be authenticated");
     }
-    console.log("  ✓ Authentication check works");
+    console.log("  ✓ Expiry + authentication checks work");
 
-    await tokenStore.clearTokens();
-    const afterClear = await tokenStore.getTokens();
-    if (afterClear !== null) {
-      throw new Error("Tokens should be cleared");
+    await tokenStore.clearTokens(userA);
+    if ((await tokenStore.getTokens(userA)) !== null) {
+      throw new Error("User A tokens should be cleared");
     }
-    console.log("  ✓ Token clearing works\n");
+    if ((await tokenStore.getTokens(userB)) === null) {
+      throw new Error("User B tokens should be unaffected");
+    }
+    console.log("  ✓ Clearing one user does not affect another\n");
   } catch (error) {
     console.error(`  ✗ Failed: ${error.message}\n`);
     process.exit(1);
   }
 
-  // Test 2: OAuth State Management
-  console.log("Test 2: OAuth State Management");
+  // Test 2: Key Store
+  console.log("Test 2: Key Store (mint, resolve, revoke)");
+  try {
+    const keyStore = await import("./src/keyStore.mjs");
+
+    const { userId, apiKey } = await keyStore.createUserKey("test");
+    if (!userId || !apiKey) {
+      throw new Error("createUserKey should return userId and apiKey");
+    }
+    if (!apiKey.startsWith("ssk_")) {
+      throw new Error("API key should have ssk_ prefix");
+    }
+    console.log("  ✓ User + API key minted");
+
+    const resolved = await keyStore.resolveKey(apiKey);
+    if (resolved !== userId) {
+      throw new Error("resolveKey should return the userId");
+    }
+    console.log("  ✓ API key resolves to userId");
+
+    const wrong = await keyStore.resolveKey("ssk_wrong-key");
+    if (wrong !== null) {
+      throw new Error("Unknown key should not resolve");
+    }
+    console.log("  ✓ Unknown key rejected");
+
+    if (!(await keyStore.userExists(userId))) {
+      throw new Error("userExists should be true");
+    }
+
+    await keyStore.revokeUser(userId);
+    if (await keyStore.userExists(userId)) {
+      throw new Error("User should be revoked");
+    }
+    if ((await keyStore.resolveKey(apiKey)) !== null) {
+      throw new Error("Revoked key should no longer resolve");
+    }
+    console.log("  ✓ Revocation works\n");
+  } catch (error) {
+    console.error(`  ✗ Failed: ${error.message}\n`);
+    process.exit(1);
+  }
+
+  // Test 3: OAuth State Management
+  console.log("Test 3: OAuth State Management");
   try {
     const { generateState, validateState } = await import("./src/oauth.mjs");
 
@@ -92,7 +140,7 @@ async function runTests() {
     if (validateState(state1)) {
       throw new Error("State should be single-use");
     }
-    console.log("  ✓ State is single-use (consumed after validation)");
+    console.log("  ✓ State is single-use");
 
     if (validateState("invalid-state")) {
       throw new Error("Invalid state should not validate");
@@ -103,12 +151,10 @@ async function runTests() {
     process.exit(1);
   }
 
-  // Test 3: OAuth Configuration
-  console.log("Test 3: OAuth Configuration");
+  // Test 4: OAuth Configuration
+  console.log("Test 4: OAuth Configuration");
   try {
-    const { isConfigured, generateState, getLoginUrl } = await import(
-      "./src/oauth.mjs"
-    );
+    const { isConfigured, generateState, getLoginUrl } = await import("./src/oauth.mjs");
 
     if (!isConfigured()) {
       throw new Error("Should be configured with env vars set");
@@ -126,8 +172,8 @@ async function runTests() {
     process.exit(1);
   }
 
-  // Test 4: Sonos API Module Structure
-  console.log("Test 4: Sonos API Module Structure");
+  // Test 5: Sonos API Module Structure
+  console.log("Test 5: Sonos API Module Structure");
   try {
     const sonosApi = await import("./src/sonosApi.mjs");
 

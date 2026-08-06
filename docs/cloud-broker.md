@@ -1,6 +1,6 @@
 # Self-Hosted Cloud Broker Contract
 
-> **Status: Planned for v0.3.x — Docker container.** The broker will ship as a standalone Docker image that users run alongside Homebridge. The container owns Sonos OAuth and token lifecycle; the plugin only talks to the broker over HTTP with a shared API key. Users who don't need cloud sources never install it.
+> **Status: Implemented.** The broker ships as a standalone service (Docker container or Azure App Service) that owns Sonos OAuth and the token lifecycle. The plugin talks to the broker over HTTP(S) with a **per-user broker API key** (`ssk_...`) that the broker mints after each user signs in with Sonos. Users who don't need cloud sources never install it.
 
 This project is intentionally local-first. For some Sonos favorites and playlists, the local UPnP path is not reliable enough, so the long-term plan is an optional self-hosted broker that uses Sonos's official cloud APIs on the user's behalf.
 
@@ -101,15 +101,16 @@ Example request:
 
 ## Authentication Between Plugin And Broker
 
-The plugin should not assume anonymous access.
+The plugin does not use anonymous access, and there is **no shared secret** baked into the plugin.
 
-Recommended first cut:
+The implemented model:
 
-- user deploys the broker
-- broker exposes a static bearer token or API key for the Homebridge plugin
-- plugin stores that token in `config.json` under `cloud.broker.apiKey`
+1. The user opens the broker's `/auth/login` in a browser and signs in with their Sonos account.
+2. The broker completes OAuth, stores that user's tokens (encrypted, keyed by a new userId), and mints a **personal broker API key** (`ssk_...`) shown to the user exactly once.
+3. The user pastes that key into `config.json` under `cloud.broker.apiKey`.
+4. The plugin sends the key as a Bearer token; the broker resolves it (sha256) to the userId and proxies that user's requests with their own Sonos access token.
 
-This is simple enough for self-hosting and avoids prematurely designing a more complex plugin-to-broker auth scheme.
+This keeps the broker URL harmless if shared, avoids distributing any scrapable shared key, and lets each user control only their own Sonos system. Keys are revocable via `POST /auth/disconnect`.
 
 ## Suggested Plugin Config Shape
 
@@ -118,8 +119,9 @@ This is simple enough for self-hosting and avoids prematurely designing a more c
   "cloud": {
     "mode": "local_plus_cloud",
     "broker": {
+      "kind": "central",
       "url": "https://sonos-broker.example.com",
-      "apiKey": "replace-me",
+      "apiKey": "ssk_your-personal-key",
       "timeoutMs": 8000,
       "routeFavorites": true,
       "routePlaylists": true
@@ -127,6 +129,8 @@ This is simple enough for self-hosting and avoids prematurely designing a more c
   }
 }
 ```
+
+> `kind` is `"central"` (hosted broker) or `"self-hosted"`. For `central`, `url` defaults to the hosted broker and may be omitted. `apiKey` is always your personal `ssk_...` key from the OAuth flow.
 
 ## Operational Guidance
 

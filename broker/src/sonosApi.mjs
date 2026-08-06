@@ -3,32 +3,32 @@ import { refreshAccessToken } from "./oauth.mjs";
 
 const BASE_URL = "https://api.ws.sonos.com/control/api/v1";
 
-async function getAuthToken() {
-  const tokens = await getTokens();
+async function getAuthToken(userId) {
+  const tokens = await getTokens(userId);
   if (!tokens) {
     throw new Error("Not authenticated");
   }
 
-  if (await isExpired()) {
+  if (await isExpired(userId)) {
     try {
-      await refreshAccessToken();
+      await refreshAccessToken(userId);
     } catch (error) {
       throw new Error(`Token refresh failed: ${error.message}`);
     }
   }
 
-  const refreshedTokens = await getTokens();
+  const refreshedTokens = await getTokens(userId);
   return refreshedTokens.accessToken;
 }
 
-async function sonosRequest(method, path, body = null, retryCount = 0) {
+async function sonosRequest(userId, method, path, body = null, retryCount = 0) {
   try {
-    const token = await getAuthToken();
+    const token = await getAuthToken(userId);
     const url = `${BASE_URL}${path}`;
     const options = {
       method,
       headers: {
-        authorization: `Bearer ${token}`,
+        authorization: "Bearer " + token,
         "content-type": "application/json",
         accept: "application/json",
       },
@@ -41,8 +41,8 @@ async function sonosRequest(method, path, body = null, retryCount = 0) {
     const response = await fetch(url, options);
 
     if (response.status === 401 && retryCount === 0) {
-      await refreshAccessToken();
-      return sonosRequest(method, path, body, 1);
+      await refreshAccessToken(userId);
+      return sonosRequest(userId, method, path, body, 1);
     }
 
     if (!response.ok) {
@@ -78,32 +78,32 @@ async function sonosRequest(method, path, body = null, retryCount = 0) {
   }
 }
 
-export async function getHouseholds() {
-  return sonosRequest("GET", "/households");
+export async function getHouseholds(userId) {
+  return sonosRequest(userId, "GET", "/households");
 }
 
-export async function getGroups(householdId) {
-  return sonosRequest("GET", `/households/${householdId}/groups`);
+export async function getGroups(userId, householdId) {
+  return sonosRequest(userId, "GET", `/households/${householdId}/groups`);
 }
 
-export async function getFavorites(householdId) {
-  return sonosRequest("GET", `/households/${householdId}/favorites`);
+export async function getFavorites(userId, householdId) {
+  return sonosRequest(userId, "GET", `/households/${householdId}/favorites`);
 }
 
-export async function getPlaylists(householdId) {
-  return sonosRequest("GET", `/households/${householdId}/playlists`);
+export async function getPlaylists(userId, householdId) {
+  return sonosRequest(userId, "GET", `/households/${householdId}/playlists`);
 }
 
-export async function loadFavorite(groupId, favoriteId, action = "PLAY_NOW") {
-  return sonosRequest("POST", `/groups/${groupId}/favorites`, {
+export async function loadFavorite(userId, groupId, favoriteId, action = "PLAY_NOW") {
+  return sonosRequest(userId, "POST", `/groups/${groupId}/favorites`, {
     favoriteId,
     action,
     playOnCompletion: true,
   });
 }
 
-export async function loadPlaylist(groupId, playlistId, action = "PLAY_NOW") {
-  return sonosRequest("POST", `/groups/${groupId}/playlists`, {
+export async function loadPlaylist(userId, groupId, playlistId, action = "PLAY_NOW") {
+  return sonosRequest(userId, "POST", `/groups/${groupId}/playlists`, {
     playlistId,
     action,
     playOnCompletion: true,

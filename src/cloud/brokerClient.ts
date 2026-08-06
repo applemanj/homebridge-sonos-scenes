@@ -40,7 +40,7 @@ export interface CloudBrokerPlaylist {
   imageUrl?: string;
 }
 
-// Default central broker URL (will be deployed to Azure)
+// Default central broker URL (hosted on Azure)
 const CENTRAL_BROKER_URL = "https://sonos-scenes-broker.azurewebsites.net";
 
 function trimTrailingSlash(value: string): string {

@@ -37,7 +37,7 @@ export function validateState(state) {
 }
 
 export function isConfigured() {
-  return CLIENT_ID && CLIENT_SECRET && REDIRECT_URI;
+  return Boolean(CLIENT_ID && CLIENT_SECRET && REDIRECT_URI);
 }
 
 export function getLoginUrl(state) {
@@ -51,6 +51,10 @@ export function getLoginUrl(state) {
   return `${OAUTH_AUTH_URL}?${params.toString()}`;
 }
 
+/**
+ * Exchange an authorization code for tokens. Does NOT persist them —
+ * the caller (server) saves them against a specific userId.
+ */
 export async function exchangeCodeForTokens(code) {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
@@ -68,27 +72,21 @@ export async function exchangeCodeForTokens(code) {
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(
-      `OAuth token exchange failed (${response.status}): ${errorText}`
-    );
+    throw new Error(`OAuth token exchange failed (${response.status}): ${errorText}`);
   }
 
   const data = await response.json();
-  const expiresAt = new Date(
-    Date.now() + (data.expires_in || 3600) * 1000
-  ).toISOString();
+  const expiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString();
 
-  await saveTokens({
+  return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
     expiresAt,
-  });
-
-  return { accessToken: data.access_token, expiresAt };
+  };
 }
 
-export async function refreshAccessToken() {
-  const tokens = await getTokens();
+export async function refreshAccessToken(userId) {
+  const tokens = await getTokens(userId);
   if (!tokens) {
     throw new Error("No tokens to refresh");
   }
@@ -108,17 +106,13 @@ export async function refreshAccessToken() {
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(
-      `OAuth token refresh failed (${response.status}): ${errorText}`
-    );
+    throw new Error(`OAuth token refresh failed (${response.status}): ${errorText}`);
   }
 
   const data = await response.json();
-  const expiresAt = new Date(
-    Date.now() + (data.expires_in || 3600) * 1000
-  ).toISOString();
+  const expiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString();
 
-  await saveTokens({
+  await saveTokens(userId, {
     accessToken: data.access_token,
     refreshToken: data.refresh_token || tokens.refreshToken,
     expiresAt,
@@ -127,16 +121,16 @@ export async function refreshAccessToken() {
   return { accessToken: data.access_token, expiresAt };
 }
 
-export async function getAuthStatus() {
-  const authenticated = await isAuthenticated();
-  const tokens = authenticated ? await getTokens() : null;
+export async function getAuthStatus(userId) {
+  const authenticated = await isAuthenticated(userId);
+  const tokens = authenticated ? await getTokens(userId) : null;
   return {
     authenticated,
     expiresAt: tokens?.expiresAt || null,
   };
 }
 
-export async function disconnect() {
-  await clearTokens();
+export async function disconnect(userId) {
+  await clearTokens(userId);
   return { ok: true };
 }
