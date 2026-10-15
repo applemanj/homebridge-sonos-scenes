@@ -732,12 +732,39 @@
           <div id="cloud-broker-fields" class="scene-cloud-settings">
           <div class="row g-3">
             <div class="col-12">
+              <strong class="d-block mb-2">Broker Deployment</strong>
+              <div class="d-grid gap-2">
+                <label class="scene-mode-choice" data-broker-choice="central">
+                  <span class="d-flex align-items-start">
+                    <input type="radio" name="broker-kind" value="central">
+                    <span>
+                      <span class="scene-mode-choice-header">
+                        <span class="scene-mode-choice-title">Cloud (Hosted)</span>
+                      </span>
+                      <span class="scene-mode-choice-copy">Connect to the hosted Sonos cloud broker on Azure. No URL to configure — just sign in with Sonos at the broker site to get your personal API key.</span>
+                    </span>
+                  </span>
+                </label>
+                <label class="scene-mode-choice" data-broker-choice="self-hosted">
+                  <span class="d-flex align-items-start">
+                    <input type="radio" name="broker-kind" value="self-hosted">
+                    <span>
+                      <span class="scene-mode-choice-header">
+                        <span class="scene-mode-choice-title">Self-Hosted</span>
+                      </span>
+                      <span class="scene-mode-choice-copy">Run the broker Docker container alongside Homebridge and point this plugin at your own URL.</span>
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </div>
+            <div class="col-12" id="broker-url-row">
               <label class="form-label" for="broker-url">
                 <span class="scene-label-row">
                   <span>Broker URL</span>
                   <span class="scene-info-tag" tabindex="0" role="button" aria-label="Explain Broker URL">
                     ?
-                    <span class="scene-tooltip">The base URL for your self-hosted Sonos cloud broker. This is only used in Local + Cloud mode.</span>
+                    <span class="scene-tooltip">The base URL for your self-hosted Sonos cloud broker. Only used when Broker Deployment is Self-Hosted.</span>
                   </span>
                 </span>
               </label>
@@ -1202,6 +1229,9 @@
       testButton: document.getElementById("test-button"),
       cloudModeInputs: Array.from(document.querySelectorAll("input[name='cloud-mode']")),
       cloudModeChoices: Array.from(document.querySelectorAll("[data-mode-choice]")),
+      brokerKindInputs: Array.from(document.querySelectorAll("input[name='broker-kind']")),
+      brokerKindChoices: Array.from(document.querySelectorAll("[data-broker-choice]")),
+      brokerUrlRow: document.getElementById("broker-url-row"),
       cloudBrokerPanel: document.getElementById("cloud-broker-panel"),
       cloudBrokerCopy: document.getElementById("cloud-broker-copy"),
       cloudBrokerFields: document.getElementById("cloud-broker-fields"),
@@ -1266,6 +1296,13 @@
       return mode === "local_plus_cloud" ? "local_plus_cloud" : "local_only";
     }
 
+    function getEffectiveBrokerKind(kind, url) {
+      if (kind === "self-hosted") return "self-hosted";
+      if (kind === "central") return "central";
+      // Legacy configs predate the kind field: a saved URL means self-hosted.
+      return url ? "self-hosted" : "central";
+    }
+
     function normalizeConfig(config) {
       const safeConfig = config || {};
       const cloudMode = getEffectiveCloudMode(safeConfig.cloud?.mode);
@@ -1288,6 +1325,7 @@
           mode: cloudMode,
           broker: Object.assign(
             {
+              kind: "central",
               url: "",
               apiKey: "",
               timeoutMs: 8000,
@@ -1305,9 +1343,12 @@
     function serializeCloudConfig() {
       const requestedMode = elements.cloudModeInputs.find((input) => input.checked)?.value || "local_only";
       const mode = getEffectiveCloudMode(requestedMode);
+      const requestedKind = elements.brokerKindInputs.find((input) => input.checked)?.value;
+      const kind = getEffectiveBrokerKind(requestedKind);
       state.config.cloud = {
         mode,
         broker: {
+          kind,
           url: elements.brokerUrl.value.trim(),
           apiKey: elements.brokerApiKey.value.trim(),
           timeoutMs: Number(elements.brokerTimeoutMs.value || 8000),
@@ -1906,12 +1947,22 @@
       const isHybrid = mode === "local_plus_cloud";
       elements.cloudBrokerPanel.classList.toggle("scene-cloud-hidden", !isHybrid);
       elements.cloudBrokerCopy.textContent = isHybrid
-        ? "Only needed if you run your own broker. The settings below stay with this plugin config and are ignored whenever Local Only is active."
+        ? "Pick where your broker runs. The settings below stay with this plugin config and are ignored whenever Local Only is active."
         : "Only needed if you choose Local + Cloud and run your own broker container.";
       elements.cloudModeNote.textContent = isHybrid
         ? "Cloud-backed sources will stay opt-in. This plugin will keep local discovery, grouping, and line-in control on your Homebridge box."
         : "Local Only is the simplest starting point. Switch to Local + Cloud only if you already run the broker container alongside Homebridge.";
       elements.allowTvSource.checked = Boolean(state.config.transport?.allowTvSource);
+
+      const brokerKind = getEffectiveBrokerKind(cloud.broker?.kind, cloud.broker?.url);
+      elements.brokerKindInputs.forEach((input) => {
+        input.checked = input.value === brokerKind;
+      });
+      elements.brokerKindChoices.forEach((choice) => {
+        choice.classList.toggle("active", choice.dataset.brokerChoice === brokerKind);
+      });
+      const isSelfHosted = brokerKind === "self-hosted";
+      elements.brokerUrlRow.classList.toggle("scene-cloud-hidden", !isSelfHosted);
 
       elements.brokerUrl.value = cloud.broker?.url || "";
       elements.brokerApiKey.value = cloud.broker?.apiKey || "";
@@ -1929,6 +1980,12 @@
 
       if (mode !== "local_plus_cloud") {
         elements.brokerStatusOutput.innerHTML = `<span class="scene-help">Broker checks will appear here after you switch to Local + Cloud.</span>`;
+        return;
+      }
+
+      const brokerKind = getEffectiveBrokerKind(cloud.broker?.kind, cloud.broker?.url);
+      if (brokerKind !== "self-hosted") {
+        elements.brokerStatusOutput.innerHTML = `<span class="scene-status-pill pending">Not Checked</span> <span class="scene-help">Using the hosted cloud broker. Click Check Broker to verify it responds.</span>`;
         return;
       }
 
@@ -2642,7 +2699,8 @@
 
     async function checkBroker() {
       serializeCloudConfig();
-      if (!state.config.cloud.broker.url) {
+      const brokerKind = getEffectiveBrokerKind(state.config.cloud.broker.kind, state.config.cloud.broker.url);
+      if (brokerKind === "self-hosted" && !state.config.cloud.broker.url) {
         state.brokerStatus = {
           error: "Enter a broker URL first.",
         };
@@ -2680,6 +2738,15 @@
       elements.checkBrokerButton.addEventListener("click", checkBroker);
 
       elements.cloudModeInputs.forEach((input) => {
+        input.addEventListener("change", () => {
+          serializeCloudConfig();
+          state.brokerStatus = null;
+          render();
+          stageConfigUpdate();
+        });
+      });
+
+      elements.brokerKindInputs.forEach((input) => {
         input.addEventListener("change", () => {
           serializeCloudConfig();
           state.brokerStatus = null;

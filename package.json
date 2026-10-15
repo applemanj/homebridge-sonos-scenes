@@ -1,6 +1,6 @@
 {
   "name": "homebridge-sonos-scenes",
-  "version": "0.1.48",
+  "version": "0.1.49",
   "description": "Homebridge plugin for Sonos workflow scenes and orchestration.",
   "author": {
     "name": "Joshua Appleman",
@@ -42,13 +42,13 @@
     "homekit"
   ],
   "engines": {
-      "homebridge": ">=1.8.0 <3.0.0-0",
-      "node": "^18.20.0 || ^20.18.0 || ^22 || ^24 || ^26"
-    },
-    "dependencies": {
-      "@homebridge/plugin-ui-utils": "^2.2.3",
-      "@svrooij/sonos": "2.6.0-beta.13"
-    },
+    "homebridge": ">=1.8.0 <3.0.0-0",
+    "node": "^18.20.0 || ^20.18.0 || ^22 || ^24 || ^26"
+  },
+  "dependencies": {
+    "@homebridge/plugin-ui-utils": "^2.2.3",
+    "@svrooij/sonos": "2.6.0-beta.13"
+  },
   "devDependencies": {
     "@types/node": "^22.15.21",
     "homebridge": "^1.11.4",
